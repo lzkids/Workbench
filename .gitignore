@@ -19,3 +19,5 @@ Thumbs.db
 # 运行日志
 trace.log
 crash.log
+publish_full/
+*.zip
