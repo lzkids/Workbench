@@ -1,0 +1,61 @@
+<Window x:Class="Workbench.StickyWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="便签" Width="280" Height="280" MinWidth="200" MinHeight="160"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        Topmost="True" ShowInTaskbar="False" ResizeMode="CanResizeWithGrip"
+        Closed="Window_Closed">
+
+    <Window.Resources>
+        <!-- 便签窗工具按钮:浅底圆角,黄底上清晰可见 -->
+        <Style x:Key="StickyToolButton" TargetType="Button">
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="Background" Value="#FFFDF0"/>
+            <Setter Property="Foreground" Value="#6B5E1E"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#F7E8A8"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#E8D68A"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+    <Grid Margin="10">
+        <Border Background="#FEF3A2" CornerRadius="10" BorderBrush="#EAD98A" BorderThickness="1"
+                MouseLeftButtonDown="Border_MouseLeftButtonDown">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="18" ShadowDepth="3" Direction="270"
+                                  Opacity="0.28" Color="#6B5E1E"/>
+            </Border.Effect>
+        <DockPanel Margin="10">
+            <DockPanel DockPanel.Dock="Top">
+                <Button DockPanel.Dock="Right" Content="✕" Style="{StaticResource StickyToolButton}"
+                        ToolTip="关闭(空便签自动丢弃)" Click="Close_Click"/>
+                <Button DockPanel.Dock="Right" Content="＋" Style="{StaticResource StickyToolButton}"
+                        ToolTip="再开一张便签" Click="NewNote_Click"/>
+                <TextBlock Text="便签" FontSize="12" Foreground="#8A7B2E" VerticalAlignment="Center"/>
+            </DockPanel>
+            <TextBox Text="{Binding Content, UpdateSourceTrigger=PropertyChanged}"
+                     AcceptsReturn="True" TextWrapping="Wrap"
+                     Background="Transparent" BorderThickness="0"
+                     FontSize="14" Foreground="#3D3617" CaretBrush="#5A5020"
+                     VerticalScrollBarVisibility="Auto" Margin="0,6,0,0"/>
+        </DockPanel>
+        </Border>
+    </Grid>
+</Window>

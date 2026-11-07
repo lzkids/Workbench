@@ -1,0 +1,21 @@
+# 构建产物
+bin/
+obj/
+publish/
+
+# 用户数据(数据库/导出/日志)——不要上传
+Data/
+*.db
+*.db.migrated
+data.prev
+
+# IDE / 系统
+.vs/
+*.user
+*.suo
+.DS_Store
+Thumbs.db
+
+# 运行日志
+trace.log
+crash.log
