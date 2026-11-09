@@ -40,6 +40,27 @@ public class SettingsViewModel : ObservableObject
     // 数据位置:显示当前目录;更改 = 选目录 → 复制数据 → 重启生效
     public string CurrentDataDir => App.DataDir;
 
+    // 关闭行为:ask=每次询问 / minimize=最小化到托盘 / exit=直接退出(存 Data\prefs.json)
+    private string _closeAction = UserPrefs.GetCloseAction();
+    public string CloseAction
+    {
+        get => _closeAction;
+        set
+        {
+            if (SetProperty(ref _closeAction, value))
+            {
+                UserPrefs.SetCloseAction(value);
+                OnPropertyChanged(nameof(CloseActionIsAsk));
+                OnPropertyChanged(nameof(CloseActionIsMinimize));
+                OnPropertyChanged(nameof(CloseActionIsExit));
+            }
+        }
+    }
+
+    public bool CloseActionIsAsk { get => _closeAction == "ask"; set { if (value) CloseAction = "ask"; } }
+    public bool CloseActionIsMinimize { get => _closeAction == "minimize"; set { if (value) CloseAction = "minimize"; } }
+    public bool CloseActionIsExit { get => _closeAction == "exit"; set { if (value) CloseAction = "exit"; } }
+
     // 导出默认文件夹:空 = Data\exports
     public string CurrentExportDir
         => AppSettings.GetExportDir() ?? System.IO.Path.Combine(App.DataDir, "exports");

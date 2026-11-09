@@ -120,9 +120,12 @@ public class IslandController
         _snapTimer.Stop();
         _island?.Close();
         _island = null;
-        foreach (var w in _popouts.Values) w.Close();
+        foreach (var w in _popouts.Values.ToList()) w.Close();
         _popouts.Clear();
     }
+
+    // 岛当前是否开着(托盘菜单分流用)
+    public bool IsIslandOpen => _island is not null;
 
     // ===== 独立窗口 =====
 

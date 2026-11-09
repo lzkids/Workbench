@@ -2,7 +2,9 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Media.Animation;
 using Wpf.Ui.Controls;
+using Workbench.Services;
 using Workbench.ViewModels;
+using WinForms = System.Windows.Forms;
 
 namespace Workbench;
 
@@ -14,10 +16,15 @@ public partial class MainWindow : FluentWindow
 
     private MainViewModel? _hookedVm;
 
+    // 托盘(通知区域)图标:应用常驻右下角;_forceExit=托盘"退出"走真实关闭,绕过最小化询问
+    private WinForms.NotifyIcon? _trayIcon;
+    private bool _forceExit;
+
     public MainWindow()
     {
         InitializeComponent();
         UpdateThemeButton();
+        CreateTrayIcon();
 
         // App 里是 new MainWindow { DataContext = ... },构造时还拿不到 VM;
         // 在 DataContextChanged 里挂选中同步钩子。先退订旧 VM 再订新 VM:
@@ -41,6 +48,102 @@ public partial class MainWindow : FluentWindow
     {
         if (e.PropertyName == nameof(MainViewModel.Selected))
             SyncTopNavHighlight();
+    }
+
+    // ===== 系统托盘 =====
+
+    // 右下角常驻图标:左键点击还原完整工作台,右键出菜单(打开/灵动岛/退出)
+    private void CreateTrayIcon()
+    {
+        var sri = Application.GetResourceStream(new Uri("pack://application:,,,/Assets/app.ico"))
+                  ?? throw new InvalidOperationException("Assets/app.ico 资源缺失");
+        var menu = new WinForms.ContextMenuStrip();
+        menu.Items.Add("打开工作台", null, (s, _) => RestoreFromTray());
+        menu.Items.Add("进入灵动岛", null, (s, _) => ToggleIslandFromTray());
+        menu.Items.Add(new WinForms.ToolStripSeparator());
+        menu.Items.Add("退出", null, (s, _) => ExitApplication());
+
+        _trayIcon = new WinForms.NotifyIcon
+        {
+            Icon = new System.Drawing.Icon(sri.Stream),
+            Text = "工作台",
+            Visible = true,
+            ContextMenuStrip = menu,
+        };
+        _trayIcon.MouseUp += (s, e) =>
+        {
+            if (e.Button == WinForms.MouseButtons.Left) RestoreFromTray();
+        };
+    }
+
+    // 从托盘还原:岛开着就还原成完整软件,否则显示主窗口
+    public void RestoreFromTray()
+    {
+        if (_islandController is { } c && c.IsIslandOpen)
+        {
+            c.ExitIslandMode();
+            return;
+        }
+        Show();
+        if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+        Activate();
+    }
+
+    // 托盘菜单的灵动岛入口:开着就还原,没开就按上次贴边进入
+    private void ToggleIslandFromTray()
+    {
+        if (_islandController is null) return;
+        if (_islandController.IsIslandOpen)
+        {
+            _islandController.ExitIslandMode();
+            return;
+        }
+        var (edgeStr, offset, scale) = IslandController.LoadIslandState();
+        var edge = edgeStr switch
+        {
+            "Left" => IslandEdge.Left,
+            "Bottom" => IslandEdge.Bottom,
+            _ => IslandEdge.Right,
+        };
+        _islandController.EnterIslandMode(edge, offset, scale);
+    }
+
+    // 真实退出:跳过最小化询问,关闭时连带收掉岛与弹窗
+    public void ExitApplication()
+    {
+        _forceExit = true;
+        Close();
+    }
+
+    // ✕ 按钮:按用户偏好分流——直接退出 / 最小化到托盘 / 每次询问
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        if (!_forceExit)
+        {
+            var action = UserPrefs.GetCloseAction();
+            if (action == "minimize")
+            {
+                e.Cancel = true;
+                Hide(); // 托盘图标还在,应用继续常驻
+                return;
+            }
+            if (action == "ask")
+            {
+                var ask = new CloseAskWindow { Owner = this };
+                if (ask.ShowDialog() != true) { e.Cancel = true; return; }
+                if (ask.Remember) UserPrefs.SetCloseAction(ask.Choice);
+                if (ask.Choice == "minimize")
+                {
+                    e.Cancel = true;
+                    Hide();
+                    return;
+                }
+                // exit → 继续走真实关闭
+            }
+        }
+        _trayIcon?.Dispose(); // 真退出:清掉托盘图标,防止残留幽灵图标
+        _trayIcon = null;
+        base.OnClosing(e);
     }
 
     private MainViewModel Vm => (MainViewModel)DataContext;

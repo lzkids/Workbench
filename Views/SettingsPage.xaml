@@ -31,6 +31,28 @@
                 </Grid>
             </ui:Card>
 
+            <!-- 关闭行为 -->
+            <TextBlock Text="关闭行为" FontSize="15" FontWeight="Bold" Margin="0,0,0,10"
+                       Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+            <ui:Card Padding="14,12" Margin="0,0,0,20">
+                <StackPanel>
+                    <TextBlock Text="点窗口右上角 ✕ 时" FontSize="11.5" Margin="0,0,0,10"
+                               Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                    <StackPanel Orientation="Horizontal">
+                        <RadioButton Content="每次询问" GroupName="CloseAction" Margin="0,0,20,0"
+                                     IsChecked="{Binding CloseActionIsAsk}"
+                                     Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+                        <RadioButton Content="最小化到托盘" GroupName="CloseAction" Margin="0,0,20,0"
+                                     IsChecked="{Binding CloseActionIsMinimize}"
+                                     Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                     ToolTip="窗口隐藏,右下角托盘图标常驻,点它还原"/>
+                        <RadioButton Content="直接退出" GroupName="CloseAction"
+                                     IsChecked="{Binding CloseActionIsExit}"
+                                     Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+                    </StackPanel>
+                </StackPanel>
+            </ui:Card>
+
             <!-- 数据位置 -->
             <TextBlock Text="数据位置" FontSize="15" FontWeight="Bold" Margin="0,0,0,10"
                        Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
