@@ -162,11 +162,15 @@ public class SettingsViewModel : ObservableObject
             }
 
             var targetDb = Path.Combine(target, "workbench.db");
-            var overwrite = true;
             if (File.Exists(targetDb))
             {
-                overwrite = Dialog.Confirm("目标位置已有数据",
-                    "目标文件夹里已存在工作台数据,是否用当前数据覆盖它?\n(选「取消」则放弃更改)");
+                // 审计修复:覆盖确认取消时直接终止,不再落到 File.Copy 的 IOException"更改失败"路径
+                if (!Dialog.Confirm("目标位置已有数据",
+                    "目标文件夹里已存在工作台数据,是否用当前数据覆盖它?\n(选「取消」则放弃更改)"))
+                {
+                    Dialog.Info("已取消", "未做任何更改。");
+                    return;
+                }
             }
 
             if (!Dialog.Confirm("更改数据位置",
@@ -176,9 +180,14 @@ public class SettingsViewModel : ObservableObject
             // 1) 先把内存数据落盘,保证复制的是最新状态
             App.Persist();
 
-            // 2) 复制数据库(覆盖与否按上面确认)
+            // 2) 复制数据库 + 偏好/岛状态随迁(审计修复:原来只迁 db,prefs/island 静默重置)
             Directory.CreateDirectory(target);
-            File.Copy(Path.Combine(current, "workbench.db"), targetDb, overwrite: overwrite);
+            File.Copy(Path.Combine(current, "workbench.db"), targetDb, overwrite: true);
+            foreach (var f in new[] { "prefs.json", "island.json" })
+            {
+                var src = Path.Combine(current, f);
+                if (File.Exists(src)) File.Copy(src, Path.Combine(target, f), overwrite: true);
+            }
 
             // 3) 记住新位置
             AppSettings.SetDataDir(useDefault ? null : target);

@@ -218,11 +218,13 @@ public class IslandController
             var root = doc.RootElement;
             var edge = root.TryGetProperty("edge", out var e) && e.ValueKind == JsonValueKind.String
                 ? e.GetString() : null;
+            // 审计加固:edge 白名单化——非合法边名一律回退 null(调用方用安全默认),杜绝任意字符串下游解析
+            edge = edge is "Left" or "Right" or "Bottom" ? edge : null;
             double? offset = root.TryGetProperty("offset", out var o) && o.ValueKind == JsonValueKind.Number
                 ? o.GetDouble() : null;
             double? scale = root.TryGetProperty("scale", out var s) && s.ValueKind == JsonValueKind.Number
                 ? s.GetDouble() : null;
-            return (string.IsNullOrWhiteSpace(edge) ? null : edge, offset, scale);
+            return (edge, offset, scale);
         }
         catch
         {

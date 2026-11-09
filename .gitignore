@@ -17,8 +17,8 @@ data.prev
 Thumbs.db
 
 # 运行日志
-trace.log
-crash.log
+*.log
+
 publish_full/
 *.zip
 .idea/

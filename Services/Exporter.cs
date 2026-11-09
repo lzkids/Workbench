@@ -31,7 +31,7 @@ public static class Exporter
         sb.AppendLine("| 标题 | 状态 | 更新时间 |");
         sb.AppendLine("|---|---|---|");
         foreach (var t in d.Tasks)
-            sb.AppendLine($"| {Escape(t.Title)} | {t.Status} | {t.UpdatedAt:yyyy-MM-dd HH:mm} |");
+            sb.AppendLine($"| {MdCell(t.Title)} | {MdCell(t.Status)} | {t.UpdatedAt:yyyy-MM-dd HH:mm} |");
         sb.AppendLine();
 
         sb.AppendLine($"## ✅ 待办({d.Todos.Count})");
@@ -41,7 +41,7 @@ public static class Exporter
             var extra = new StringBuilder();
             if (t.Priority != "普通") extra.Append($"[{t.Priority}优先]");
             if (t.DueDate.HasValue) extra.Append($"[到期 {t.DueDate:MM-dd}]");
-            sb.AppendLine($"- [{mark}] {Escape(t.Title)} {extra}");
+            sb.AppendLine($"- [{mark}] {MdCell(t.Title)} {extra}");
         }
 
         File.WriteAllText(path, sb.ToString(), new UTF8Encoding(true));
@@ -52,6 +52,10 @@ public static class Exporter
 
     private static string Escape(string s)
         => s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+
+    // Markdown 单元格转义(审计修复):竖线破坏表格列,换行破坏行结构
+    private static string MdCell(string s)
+        => Escape(s).Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ");
 
     public static string BuildHtml(WorkbenchData d)
     {
@@ -84,7 +88,7 @@ ul{list-style:none;padding-left:4px}li{margin:6px 0;font-size:14px}
         foreach (var t in d.Tasks)
         {
             var done = t.Status == "已完成" ? " class=done" : "";
-            sb.Append($"<tr><td{done}>{Escape(t.Title)}</td><td>{t.Status}</td><td>{t.UpdatedAt:MM-dd HH:mm}</td></tr>");
+            sb.Append($"<tr><td{done}>{Escape(t.Title)}</td><td>{Escape(t.Status)}</td><td>{t.UpdatedAt:MM-dd HH:mm}</td></tr>");
         }
         sb.Append("</table>");
 

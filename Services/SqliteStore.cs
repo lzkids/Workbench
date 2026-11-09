@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
@@ -231,8 +232,9 @@ public class SqliteStore : IDataStore
         }
         catch (Exception ex)
         {
-            // 写库失败不上抛炸 UI:记日志,数据留在内存,下次操作再写
+            // 写库失败不上抛炸 UI:记日志、弹一次可见告警,数据留在内存,下次操作再写
             App.WriteCrashLog(ex);
+            App.NotifySaveFailure(ex);
         }
     }
 
@@ -307,10 +309,14 @@ public class SqliteStore : IDataStore
         cmd.ExecuteNonQuery();
     }
 
+    // 日期列容错解析(审计加固):TryParse + 固定文化,坏串回退当前时间而不是炸掉整个 Load
     private static DateTime GetDate(SqliteDataReader r, int col)
-        => r.IsDBNull(col) ? DateTime.Now : DateTime.Parse(r.GetString(col));
+        => r.IsDBNull(col) ? DateTime.Now
+           : DateTime.TryParse(r.GetString(col), CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d
+           : DateTime.Now;
 
-    private static string Fmt(DateTime dt) => dt.ToString("yyyy-MM-dd HH:mm:ss");
+    // "O" 往返格式:写入与读取在固定文化下互逆,不再受系统区域设置影响
+    private static string Fmt(DateTime dt) => dt.ToString("O");
 
     // 上一代 JSON → SQLite 一次性迁移(成功后把 JSON 改名保留)
     private void MigrateLegacyJson()

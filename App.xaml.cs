@@ -27,6 +27,17 @@ public partial class App : Application
     {
         Trace("startup begin, args=[" + string.Join(", ", e.Args) + "]");
 
+        // 单实例守卫(审计修复):两个实例会对同一 workbench.db 做"整库快照替换"式保存,
+        // 后写者用陈旧快照覆盖先写者。第二实例直接提示退出。
+        _singleInstance = new Mutex(initiallyOwned: true, @"Local\Workbench.SingleInstance", out var createdNew);
+        if (!createdNew)
+        {
+            System.Windows.MessageBox.Show("工作台已在运行中。\n如需打开界面,请从右下角托盘图标或灵动岛进入。", "工作台",
+                System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+            Shutdown();
+            return;
+        }
+
         // 黑匣子:任何未捕获异常写 crash.log 且不闪退
         DispatcherUnhandledException += (_, args) =>
         {
@@ -64,10 +75,12 @@ public partial class App : Application
         main.AttachIsland(islandController);
         Trace("island controller attached");
 
-        // 上次化过岛 → 直接以灵动岛启动(主窗口不闪现);island= 测试钩子优先
-        var islandArg = e.Args.FirstOrDefault(a => a.StartsWith("island"));
+        // 上次化过岛 → 直接以灵动岛启动(主窗口不闪现);island= 测试钩子优先。
+        // 审计修复:argv 只接受精确形式(island / island=left|right|bottom),不再 StartsWith 宽松匹配;
+        // island.json 的 edge 由 LoadIslandState 白名单化,此处不再 Enum.Parse 任意字符串
+        var islandArg = e.Args.FirstOrDefault(a => a == "island" || a.StartsWith("island="));
         var (savedEdge, savedOffset, savedScale) = IslandController.LoadIslandState();
-        bool startIsland = islandArg is not null || savedEdge is "Left" or "Right" or "Bottom";
+        bool startIsland = islandArg is not null || savedEdge is not null;
         if (!startIsland)
         {
             main.Show();
@@ -80,7 +93,12 @@ public partial class App : Application
                 "island=left" => IslandEdge.Left,
                 "island=bottom" => IslandEdge.Bottom,
                 "island" or "island=right" => IslandEdge.Right,
-                _ => Enum.Parse<IslandEdge>(savedEdge),
+                _ => savedEdge switch
+                {
+                    "Left" => IslandEdge.Left,
+                    "Bottom" => IslandEdge.Bottom,
+                    _ => IslandEdge.Right,
+                },
             };
             islandController.EnterIslandMode(edge, savedOffset, savedScale);
             Trace($"island mode entered: {edge} (arg={islandArg ?? "saved"}, offset={savedOffset?.ToString() ?? "center"}, scale={savedScale?.ToString() ?? "1"})");
@@ -111,6 +129,24 @@ public partial class App : Application
             Trace("memtest branch reached");
             RunMemoryLeakTest(islandController);
         }
+    }
+
+    private static Mutex? _singleInstance;
+    private static bool _saveFailureNotified;
+
+    // 保存失败一次性可见告警(审计修复):写库异常原被静默吞掉,防抖窗口内的更改丢失无任何信号
+    public static void NotifySaveFailure(Exception ex)
+    {
+        WriteCrashLog(ex);
+        if (_saveFailureNotified) return;
+        _saveFailureNotified = true;
+        try
+        {
+            System.Windows.MessageBox.Show("数据保存失败——本次的更改还在界面上,但尚未写入磁盘。\n\n" +
+                ex.Message + "\n\n(再次失败将不再提示,详情见日志)", "工作台",
+                System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+        }
+        catch { /* 通知本身失败不再放大问题 */ }
     }
 
     // ===== 内存泄漏自测:岛开合×50 + 弹窗开合×20,断言托管堆回基线、窗口数不变 =====
@@ -211,8 +247,8 @@ public partial class App : Application
             foreach (var t in leftovers) Data.Todos.Remove(t);
             Persist();
 
-            // 4) 三格式导出到 exe 旁 Data\exports\
-            var dir = Path.Combine(AppContext.BaseDirectory, "Data", "exports");
+            // 4) 三格式导出到数据目录 exports(审计修复:跟随 App.DataDir,不再固定写 exe 旁)
+            var dir = Path.Combine(App.DataDir, "exports");
             Directory.CreateDirectory(dir);
             Exporter.ExportMarkdown(Path.Combine(dir, "test.md"), Data);
             Exporter.ExportHtml(Path.Combine(dir, "test.html"), Data);
@@ -270,6 +306,19 @@ public partial class App : Application
         catch (Exception ex)
         {
             Trace($"selftest EXCEPTION: {ex}");
+        }
+        finally
+        {
+            // 审计修复:即使中途抛异常也清理测试残留,防止被 1 秒防抖自动保存持久化进真实库
+            try
+            {
+                foreach (var t in Data.Todos.Where(t => t.Title == "自测条目").ToList()) Data.Todos.Remove(t);
+                foreach (var n in Data.Notes.Where(n => n.Content == "归档自测").ToList()) Data.Notes.Remove(n);
+                foreach (var t in Data.Tasks.Where(t => t.Title == "子任务自测").ToList()) Data.Tasks.Remove(t);
+                TagOptions.RemoveTag("自测标签X");
+                Persist();
+            }
+            catch { /* 清理失败不掩盖原始结果 */ }
         }
     }
 
@@ -338,19 +387,32 @@ public partial class App : Application
 
     public static void RestoreFromRecycle(RecycleItem r)
     {
-        switch (r.Kind)
+        // 审计修复:整个恢复流程包 try/catch——反序列化失败只提示不炸 UI,
+        // 白名单外的 Kind 抛异常走同一容错,条目保留在回收站而不是被 Remove 静默销毁
+        try
         {
-            case "Note":
-                Data.Notes.Insert(0, JsonSerializer.Deserialize<NoteItem>(r.PayloadJson) ?? new NoteItem());
-                break;
-            case "Task":
-                Data.Tasks.Insert(0, JsonSerializer.Deserialize<TaskItem>(r.PayloadJson) ?? new TaskItem());
-                break;
-            case "Todo":
-                Data.Todos.Insert(0, JsonSerializer.Deserialize<TodoItem>(r.PayloadJson) ?? new TodoItem());
-                break;
+            switch (r.Kind)
+            {
+                case "Note":
+                    Data.Notes.Insert(0, JsonSerializer.Deserialize<NoteItem>(r.PayloadJson) ?? new NoteItem());
+                    break;
+                case "Task":
+                    Data.Tasks.Insert(0, JsonSerializer.Deserialize<TaskItem>(r.PayloadJson) ?? new TaskItem());
+                    break;
+                case "Todo":
+                    Data.Todos.Insert(0, JsonSerializer.Deserialize<TodoItem>(r.PayloadJson) ?? new TodoItem());
+                    break;
+                default:
+                    throw new InvalidOperationException($"未知的回收站类型「{r.Kind}」,条目已保留");
+            }
+            Data.RecycleBin.Remove(r);
         }
-        Data.RecycleBin.Remove(r);
+        catch (Exception ex)
+        {
+            WriteCrashLog(ex);
+            Dialog.Info("恢复失败", "条目已保留在回收站,未做任何改动。\n\n" + ex.Message);
+            return;
+        }
         Persist();
     }
 
@@ -358,6 +420,7 @@ public partial class App : Application
     {
         SaveTimer.Stop();
         Persist(); // 退出前把防抖窗口里的最后改动落盘
+        _singleInstance?.Dispose(); // 释放单实例守卫,允许下一次启动
         base.OnExit(e);
     }
 

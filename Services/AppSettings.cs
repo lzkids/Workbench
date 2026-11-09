@@ -1,4 +1,5 @@
 using Microsoft.Win32;
+using System.IO;
 
 namespace Workbench.Services;
 
@@ -14,7 +15,13 @@ public static class AppSettings
         {
             using var k = Registry.CurrentUser.OpenSubKey(Key);
             var v = k?.GetValue("DataDir") as string;
-            return string.IsNullOrWhiteSpace(v) ? null : v;
+            // 审计加固:该单值重定向全部数据 sink,归一化校验,盘根/非法路径回退默认
+            if (string.IsNullOrWhiteSpace(v)) return null;
+            try { v = Path.GetFullPath(v); } catch { return null; }
+            var root = Path.GetPathRoot(v)?.TrimEnd('\\');
+            return string.IsNullOrEmpty(root) || v.TrimEnd('\\').Equals(root, StringComparison.OrdinalIgnoreCase)
+                ? null
+                : v;
         }
         catch
         {
