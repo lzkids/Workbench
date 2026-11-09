@@ -72,13 +72,6 @@ public class TaskItem : ObservableObject
 
     public bool HasSubTasks => _subTasks.Count > 0;
 
-    // 主页跳转后的临时高亮(3 秒自动消除,不持久化)
-    private bool _isHighlighted;
-    public bool IsHighlighted
-    {
-        get => _isHighlighted;
-        set => SetProperty(ref _isHighlighted, value);
-    }
     // "2/5" 形式的完成进度
     public string SubTasksProgress => $"{_subTasks.Count(s => s.IsDone)}/{_subTasks.Count}";
 

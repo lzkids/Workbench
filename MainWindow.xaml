@@ -10,9 +10,6 @@
 
     <!-- 核心:内容区绑定的是 ViewModel,这里按 ViewModel 类型映射到对应页面(UserControl) -->
     <Window.Resources>
-        <DataTemplate DataType="{x:Type vm:DashboardViewModel}">
-            <views:DashboardPage/>
-        </DataTemplate>
         <DataTemplate DataType="{x:Type vm:NotesViewModel}">
             <views:NotesPage/>
         </DataTemplate>
@@ -31,6 +28,122 @@
         <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
             <views:SettingsPage/>
         </DataTemplate>
+
+        <!-- 侧栏导航项共用模板:上部列表和底部图标区同一套外观。
+             Glyph 是彩色 emoji,不吃 Foreground;Title 必须显式跟主题,
+             否则深色下是原生黑字=隐形(选中态由 DataTrigger 覆盖为白色);
+             收起时 Title 隐藏,只留图标(居中) -->
+        <DataTemplate x:Key="NavItemTemplate">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding Glyph}" FontSize="15" VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding Title}" FontSize="13.5" Margin="10,0,0,0" VerticalAlignment="Center">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground"
+                                    Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                    <Setter Property="Foreground" Value="White"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding DataContext.IsCollapsed, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </StackPanel>
+        </DataTemplate>
+
+        <Style x:Key="NavItemStyle" TargetType="ListBoxItem">
+            <!-- 功能名悬停提示:只在收起(纯图标)状态启用 -->
+            <Setter Property="ToolTip" Value="{Binding Title}"/>
+            <Setter Property="ToolTipService.IsEnabled" Value="False"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" CornerRadius="8" Margin="12,3" Padding="12,9"
+                                Background="Transparent" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background"
+                                        Value="{DynamicResource SubtleFillColorSecondaryBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#2563EB"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <DataTrigger Binding="{Binding DataContext.IsCollapsed, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                <Setter TargetName="Bd" Property="Margin" Value="6,3"/>
+                                <Setter TargetName="Bd" Property="Padding" Value="0,9"/>
+                            </DataTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding DataContext.IsCollapsed, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                    <Setter Property="ToolTipService.IsEnabled" Value="True"/>
+                    <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- 底部小图标按钮:悬停高亮(用独立覆盖层,选中蓝底时悬停仍可见) -->
+        <Style x:Key="IconNavButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Border CornerRadius="8" Padding="10,7" Background="{TemplateBinding Background}"
+                                    SnapsToDevicePixels="True">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <Border x:Name="HoverBd" CornerRadius="8" Background="Transparent" IsHitTestVisible="False"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="HoverBd" Property="Background"
+                                        Value="{DynamicResource SubtleFillColorSecondaryBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 回收站/设置:被选中时和上部导航同款蓝底 -->
+        <Style x:Key="RecycleBtnStyle" TargetType="Button" BasedOn="{StaticResource IconNavButtonStyle}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsRecycleSelected}" Value="True">
+                    <Setter Property="Background" Value="#2563EB"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="SettingsBtnStyle" TargetType="Button" BasedOn="{StaticResource IconNavButtonStyle}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSettingsSelected}" Value="True">
+                    <Setter Property="Background" Value="#2563EB"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- 侧栏收起/展开开关:收起后居中,箭头方向和提示语一起翻转 -->
+        <Style x:Key="SidebarToggleStyle" TargetType="Button" BasedOn="{StaticResource IconNavButtonStyle}">
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="ToolTip" Value="收起侧边栏"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding DataContext.IsCollapsed, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                    <Setter Property="HorizontalAlignment" Value="Center"/>
+                    <Setter Property="ToolTip" Value="展开侧边栏"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
 
     <Grid>
@@ -44,77 +157,98 @@
 
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="200"/>
+                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- 左侧导航:圆角高亮 + 底部主题切换 -->
-            <Border Grid.Column="0"
+            <!-- 左侧导航:圆角高亮 + 底部图标区,可整体收起为纯图标栏 -->
+            <Border x:Name="Sidebar" Grid.Column="0" Width="200"
                     BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
                     BorderThickness="0,0,1,0">
                 <DockPanel>
-                    <StackPanel DockPanel.Dock="Top" Margin="22,10,0,12">
-                        <TextBlock Text="工作台" FontSize="17" FontWeight="Bold"
-                                   Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
-                        <TextBlock Text="Workbench" FontSize="10" Margin="0,2,0,0"
-                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                    <!-- 头部:应用名 + 收起/展开开关 -->
+                    <Grid DockPanel.Dock="Top">
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Setter Property="Margin" Value="22,10,10,4"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding DataContext.IsCollapsed, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                        <Setter Property="Margin" Value="0,10,0,4"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
+                        <StackPanel HorizontalAlignment="Left" VerticalAlignment="Center">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding DataContext.IsCollapsed, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <TextBlock Text="工作台" FontSize="17" FontWeight="Bold"
+                                       Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+                            <TextBlock Text="Workbench" FontSize="10" Margin="0,2,0,0"
+                                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                        </StackPanel>
+                        <Button Style="{StaticResource SidebarToggleStyle}"
+                                VerticalAlignment="Center" Click="SidebarToggle_Click">
+                            <TextBlock Text="«" FontSize="14" FontWeight="Bold" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding DataContext.IsCollapsed, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                                <Setter Property="Text" Value="»"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Button>
+                    </Grid>
+
+                    <!-- 底部图标区:深色模式 / 回收站 / 设置,永远只留图标,悬停显示名称。
+                         注意:Orientation/Margin 都由 Style 控制——写成 XAML 本地属性会压住触发器 -->
+                    <StackPanel DockPanel.Dock="Bottom">
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Orientation" Value="Horizontal"/>
+                                <Setter Property="Margin" Value="9,8,12,12"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding DataContext.IsCollapsed, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                        <Setter Property="Orientation" Value="Vertical"/>
+                                        <Setter Property="Margin" Value="0,8,0,12"/>
+                                        <Setter Property="HorizontalAlignment" Value="Center"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+                        <Button x:Name="ThemeToggle" Style="{StaticResource IconNavButtonStyle}"
+                                Click="ThemeToggle_Click" ToolTip="深色模式" Margin="3">
+                            <TextBlock x:Name="ThemeGlyph" Text="🌙" FontSize="15" VerticalAlignment="Center"/>
+                        </Button>
+                        <Button x:Name="RecycleBtn" Style="{StaticResource RecycleBtnStyle}"
+                                Click="BottomNav_Click" ToolTip="回收站" Margin="3">
+                            <TextBlock Text="🗑️" FontSize="15" VerticalAlignment="Center"/>
+                        </Button>
+                        <Button x:Name="SettingsBtn" Style="{StaticResource SettingsBtnStyle}"
+                                Click="BottomNav_Click" ToolTip="设置" Margin="3">
+                            <TextBlock Text="⚙️" FontSize="15" VerticalAlignment="Center"/>
+                        </Button>
                     </StackPanel>
 
-                    <ui:Button x:Name="ThemeToggle" DockPanel.Dock="Bottom"
-                               Click="ThemeToggle_Click"
-                               Content="🌙 深色模式" Appearance="Secondary"
-                               HorizontalAlignment="Stretch" Margin="12,8,12,12"/>
-
-                    <ListBox ItemsSource="{Binding NavItems}"
-                             SelectedItem="{Binding Selected}"
-                             BorderThickness="0" Background="Transparent" Padding="0,2">
-                        <ListBox.ItemContainerStyle>
-                            <Style TargetType="ListBoxItem">
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="ListBoxItem">
-                                            <Border x:Name="Bd" CornerRadius="8" Margin="12,3" Padding="12,9"
-                                                    Background="Transparent" SnapsToDevicePixels="True">
-                                                <ContentPresenter/>
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="Bd" Property="Background"
-                                                            Value="{DynamicResource SubtleFillColorSecondaryBrush}"/>
-                                                </Trigger>
-                                                <Trigger Property="IsSelected" Value="True">
-                                                    <Setter TargetName="Bd" Property="Background" Value="#2563EB"/>
-                                                    <Setter Property="Foreground" Value="White"/>
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                            </Style>
-                        </ListBox.ItemContainerStyle>
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel Orientation="Horizontal">
-                                    <!-- Glyph 是彩色 emoji,不吃 Foreground;Title 是文字,必须显式跟主题,
-                                         否则深色下是原生黑字=隐形(选中态由 DataTrigger 覆盖为白色) -->
-                                    <TextBlock Text="{Binding Glyph}" FontSize="15" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                                    <TextBlock Text="{Binding Title}" FontSize="13.5" VerticalAlignment="Center">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Foreground"
-                                                        Value="{DynamicResource TextFillColorPrimaryBrush}"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                                                        <Setter Property="Foreground" Value="White"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
-                                </StackPanel>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+                    <!-- 上部主导航:收起时只留图标,悬停显示功能名。
+                         SelectedItem 不做 TwoWay 绑定——回收站/设置不在本列表里,
+                         由 code-behind 显式同步,避开 Selector 对外来项的回写坑 -->
+                    <ListBox x:Name="TopNav"
+                             ItemsSource="{Binding TopNavItems}"
+                             ItemContainerStyle="{StaticResource NavItemStyle}"
+                             ItemTemplate="{StaticResource NavItemTemplate}"
+                             BorderThickness="0" Background="Transparent" Padding="0,2"
+                             SelectionChanged="TopNav_SelectionChanged"/>
                 </DockPanel>
             </Border>
 

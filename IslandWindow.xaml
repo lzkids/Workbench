@@ -1,0 +1,62 @@
+<Window x:Class="Workbench.IslandWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="工作台 · 灵动岛"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        Topmost="True" ShowInTaskbar="False" ResizeMode="NoResize"
+        SizeToContent="WidthAndHeight"
+        WindowStartupLocation="Manual">
+
+    <Window.Resources>
+        <!-- 岛上的入口按钮:胶囊小项,悬停浮起。
+             坑:必须显式 Transparent,否则吃到 WPF-UI 默认灰底(见 MainWindow IconNavButtonStyle) -->
+        <Style x:Key="PillItemStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Border CornerRadius="14" Padding="10,7"
+                                    Background="{TemplateBinding Background}" SnapsToDevicePixels="True">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <Border x:Name="HoverBd" CornerRadius="14" Background="Transparent" IsHitTestVisible="False"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="HoverBd" Property="Background"
+                                        Value="{DynamicResource SubtleFillColorSecondaryBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <!-- 外层透明边距给投影和放大(1.18x)留空间,防止视觉放大被窗口边界裁切;
+         内层 Pill 是胶囊本体,鼠标靠近时 RenderTransform 视觉缩放,拖边缘时 LayoutTransform 真实缩放 -->
+    <Grid Margin="28,16">
+        <Border x:Name="Pill" CornerRadius="24" RenderTransformOrigin="0.5,0.5"
+                Background="{DynamicResource SolidBackgroundFillColorSecondaryBrush}"
+                BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="1"
+                MouseLeftButtonDown="Pill_MouseLeftButtonDown"
+                MouseLeftButtonUp="Pill_MouseLeftButtonUp"
+                MouseMove="Pill_MouseMove"
+                LostMouseCapture="Pill_LostMouseCapture">
+            <Border.LayoutTransform>
+                <ScaleTransform x:Name="BodyScale"/>
+            </Border.LayoutTransform>
+            <Border.RenderTransform>
+                <ScaleTransform x:Name="PillScale"/>
+            </Border.RenderTransform>
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="20" ShadowDepth="0" Opacity="0.3"/>
+            </Border.Effect>
+            <StackPanel x:Name="ItemsHost" Orientation="Horizontal" Margin="6,4"/>
+        </Border>
+    </Grid>
+</Window>

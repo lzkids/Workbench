@@ -44,16 +44,6 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <ui:Card Padding="12,9" Margin="0,0,0,10">
-                                <ui:Card.Style>
-                                    <Style TargetType="ui:Card">
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsHighlighted}" Value="True">
-                                                <Setter Property="BorderBrush" Value="#2563EB"/>
-                                                <Setter Property="BorderThickness" Value="1.5"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </ui:Card.Style>
                                 <StackPanel>
                                     <DockPanel>
                                         <ui:Button DockPanel.Dock="Right" Content="✕" Width="28" Height="28"

@@ -4,7 +4,20 @@ namespace Workbench.ViewModels;
 
 public class MainViewModel : ObservableObject
 {
+    // 全部导航项:索引恒定;Top/Bottom 只是侧栏的显示分区
     public List<NavigationItem> NavItems { get; }
+    // 侧栏上部列表(收起时变成纯图标)
+    public List<NavigationItem> TopNavItems { get; }
+    // 侧栏底部图标区(回收站/设置,永远只显示图标)
+    public List<NavigationItem> BottomNavItems { get; }
+
+    // 侧栏收起态:宽度动画在 MainWindow,文字/边距的显隐全部由绑定驱动
+    private bool _isCollapsed;
+    public bool IsCollapsed { get => _isCollapsed; set => SetProperty(ref _isCollapsed, value); }
+
+    // 底部两个图标按钮的选中高亮(与 NavItems[4]/[5] 对应)
+    public bool IsRecycleSelected => ReferenceEquals(Selected, NavItems[4]);
+    public bool IsSettingsSelected => ReferenceEquals(Selected, NavItems[5]);
 
     private NavigationItem _selected = null!;
     public NavigationItem Selected
@@ -15,10 +28,11 @@ public class MainViewModel : ObservableObject
             if (SetProperty(ref _selected, value) && value is not null)
             {
                 Current = value.Page;
+                OnPropertyChanged(nameof(IsRecycleSelected));
+                OnPropertyChanged(nameof(IsSettingsSelected));
                 // 页面到达钩子:需要刷新过滤视图/重建分组的页面在这里触发
                 switch (value.Page)
                 {
-                    case DashboardViewModel p: p.Rebuild(); break;
                     case NotesViewModel p: p.RefreshFilter(); break;
                     case TasksViewModel p: p.RefreshFilter(); break;
                     case TodosViewModel p: p.RefreshSort(); break;
@@ -36,7 +50,6 @@ public class MainViewModel : ObservableObject
     {
         NavItems = new List<NavigationItem>
         {
-            new() { Glyph = "🏠", Title = "主页",     Page = new DashboardViewModel(this) },
             new() { Glyph = "📝", Title = "便签",     Page = new NotesViewModel() },
             new() { Glyph = "🗂️", Title = "任务记录", Page = new TasksViewModel() },
             new() { Glyph = "✅",  Title = "待办",     Page = new TodosViewModel() },
@@ -44,35 +57,8 @@ public class MainViewModel : ObservableObject
             new() { Glyph = "🗑️", Title = "回收站",   Page = new RecycleBinViewModel() },
             new() { Glyph = "⚙️",  Title = "设置",     Page = new SettingsViewModel() },
         };
+        TopNavItems = NavItems.Take(4).ToList();
+        BottomNavItems = NavItems.Skip(4).ToList();
         Selected = NavItems[Math.Clamp(initialPage, 0, NavItems.Count - 1)];
-    }
-
-    // 供主页等页面的跳转按钮使用
-    public void SelectIndex(int index)
-        => Selected = NavItems[Math.Clamp(index, 0, NavItems.Count - 1)];
-
-    // 主页点击任务条目:跳到任务页并高亮那条任务(3 秒后自动消除)
-    public void HighlightTask(string id)
-    {
-        HighlightTaskId = id;
-        foreach (var t in App.Data.Tasks)
-            t.IsHighlighted = t.Id == id;
-
-        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
-        timer.Tick += (s, e) =>
-        {
-            foreach (var t in App.Data.Tasks)
-                t.IsHighlighted = false;
-            HighlightTaskId = null;
-            ((System.Windows.Threading.DispatcherTimer)s).Stop();
-        };
-        timer.Start();
-    }
-
-    private string? _highlightTaskId;
-    public string? HighlightTaskId
-    {
-        get => _highlightTaskId;
-        private set => SetProperty(ref _highlightTaskId, value);
     }
 }

@@ -21,3 +21,4 @@ trace.log
 crash.log
 publish_full/
 *.zip
+.idea/

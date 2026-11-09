@@ -53,13 +53,43 @@ public partial class App : Application
         HookAutoSave(Data);
         Trace("autosave hooked");
 
-        // 可选启动参数:0-6 选初始页;"toggle" 自动切主题;"selftest" 跑功能自测(自动化验证用)
+        // 可选启动参数:0-5 选初始页;"toggle" 自动切主题;"selftest" 跑功能自测(自动化验证用)
         int page = 0;
-        if (e.Args.Length > 0 && int.TryParse(e.Args[0], out var p) && p is >= 0 and <= 6) page = p;
+        if (e.Args.Length > 0 && int.TryParse(e.Args[0], out var p) && p is >= 0 and <= 5) page = p;
         var main = new MainWindow { DataContext = new MainViewModel(page) };
         Trace("window constructed");
-        main.Show();
-        Trace("window shown");
+
+        // 灵动岛总控:主窗口拖到屏幕左/右/下边缘化岛
+        var islandController = new IslandController(main);
+        main.AttachIsland(islandController);
+        Trace("island controller attached");
+
+        // 上次化过岛 → 直接以灵动岛启动(主窗口不闪现);island= 测试钩子优先
+        var islandArg = e.Args.FirstOrDefault(a => a.StartsWith("island"));
+        var (savedEdge, savedOffset, savedScale) = IslandController.LoadIslandState();
+        bool startIsland = islandArg is not null || savedEdge is "Left" or "Right" or "Bottom";
+        if (!startIsland)
+        {
+            main.Show();
+            Trace("window shown");
+        }
+        else
+        {
+            var edge = islandArg switch
+            {
+                "island=left" => IslandEdge.Left,
+                "island=bottom" => IslandEdge.Bottom,
+                "island" or "island=right" => IslandEdge.Right,
+                _ => Enum.Parse<IslandEdge>(savedEdge),
+            };
+            islandController.EnterIslandMode(edge, savedOffset, savedScale);
+            Trace($"island mode entered: {edge} (arg={islandArg ?? "saved"}, offset={savedOffset?.ToString() ?? "center"}, scale={savedScale?.ToString() ?? "1"})");
+        }
+        if (e.Args.Contains("popout"))
+        {
+            islandController.OpenPopout("notes");
+            Trace("popout opened: notes");
+        }
 
         // 测试钩子:同步执行(与点击按钮完全等价)。之前的 BeginInvoke(ApplicationIdle)
         // 从未触发过,导致自动化测试全部假阴性——教训已记
@@ -75,6 +105,76 @@ public partial class App : Application
             Trace("selftest branch reached");
             RunSelfTest();
         }
+
+        if (e.Args.Contains("memtest"))
+        {
+            Trace("memtest branch reached");
+            RunMemoryLeakTest(islandController);
+        }
+    }
+
+    // ===== 内存泄漏自测:岛开合×50 + 弹窗开合×20,断言托管堆回基线、窗口数不变 =====
+    private static void RunMemoryLeakTest(IslandController controller)
+    {
+        try
+        {
+            Trace("memtest: begin");
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+
+            // 预热 3 轮:首轮的模板/字体缓存属于一次性分配,不计入泄漏基线
+            for (var i = 0; i < 3; i++)
+            {
+                controller.EnterIslandMode(IslandEdge.Bottom);
+                controller.ExitIslandMode();
+            }
+            long baseHeap = GcHeap();
+            var baseWindows = Application.Current.Windows.Count;
+
+            const int islandCycles = 50;
+            for (var i = 0; i < islandCycles; i++)
+            {
+                controller.EnterIslandMode(IslandEdge.Bottom);
+                controller.ExitIslandMode();
+                // 让 UI 线程把窗口销毁的收尾消息处理完再进下一轮
+                Application.Current.Dispatcher.Invoke(DispatcherPriority.Background, new Action(() => { }));
+            }
+            long afterIslandHeap = GcHeap();
+            var afterIslandWindows = Application.Current.Windows.Count;
+
+            const int popoutCycles = 20;
+            for (var i = 0; i < popoutCycles; i++)
+            {
+                controller.OpenPopout("notes");
+                controller.OpenPopout("tasks");
+                controller.OpenPopout("todos");
+                controller.CloseAllPopouts();
+                Application.Current.Dispatcher.Invoke(DispatcherPriority.Background, new Action(() => { }));
+            }
+            long endHeap = GcHeap();
+            var endWindows = Application.Current.Windows.Count;
+
+            double islandDeltaMb = (afterIslandHeap - baseHeap) / 1024.0 / 1024;
+            double popoutDeltaMb = (endHeap - afterIslandHeap) / 1024.0 / 1024;
+            var pass = islandDeltaMb <= 10 && popoutDeltaMb <= 10
+                && afterIslandWindows == baseWindows && endWindows == baseWindows;
+
+            Trace($"memtest: island×{islandCycles} Δheap={islandDeltaMb:F2}MB, " +
+                  $"windows {baseWindows}->{afterIslandWindows}; popout×{popoutCycles} Δheap={popoutDeltaMb:F2}MB, " +
+                  $"windows->{endWindows}; {sw.ElapsedMilliseconds}ms");
+            Trace(pass ? "memtest: PASS" : "memtest: FAIL");
+        }
+        catch (Exception ex)
+        {
+            Trace($"memtest: EXCEPTION {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    private static long GcHeap()
+    {
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        return GC.GetTotalMemory(true);
     }
 
     // ===== 功能自测:回收站流转 + 三格式导出,结果写 trace.log =====
@@ -333,7 +433,7 @@ public partial class App : Application
         var line = $"[{DateTime.Now:HH:mm:ss.fff}] {message}\r\n";
         try
         {
-            File.AppendAllText(Path.Combine(AppContext.BaseDirectory, "trace.log"), line);
+            WriteTrace(Path.Combine(AppContext.BaseDirectory, "trace.log"), line);
         }
         catch { /* 单路失败不影响另一路 */ }
         try
@@ -341,8 +441,21 @@ public partial class App : Application
             var dir = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Workbench");
             Directory.CreateDirectory(dir);
-            File.AppendAllText(Path.Combine(dir, "trace.log"), line);
+            WriteTrace(Path.Combine(dir, "trace.log"), line);
         }
         catch { /* 同上 */ }
+    }
+
+    private static int _traceWrites;
+
+    private static void WriteTrace(string path, string line)
+    {
+        // 每 200 次写入查一次大小,超过 2MB 轮转成 .old.log(日志无上限增长也是一种泄漏)
+        if (++_traceWrites % 200 == 1 && File.Exists(path)
+            && new FileInfo(path).Length > 2 * 1024 * 1024)
+        {
+            File.Move(path, Path.ChangeExtension(path, ".old.log"), overwrite: true);
+        }
+        File.AppendAllText(path, line);
     }
 }
