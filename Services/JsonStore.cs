@@ -61,7 +61,7 @@ public class JsonStore : IDataStore
     // 保存:临时文件 + 原子替换 + 短重试。
     // 实测遇到过瞬时 "Access denied"(杀软实时防护对新建文件的短暂锁定),
     // 所以写盘失败绝不上抛炸 UI——记录到 crash.log,数据留在内存,下次操作再写。
-    public void Save(WorkbenchData data)
+    public bool Save(WorkbenchData data)
     {
         try
         {
@@ -78,7 +78,7 @@ public class JsonStore : IDataStore
                         File.Replace(tmp, FilePath, Path.Combine(Dir, "data.prev"));
                     else
                         File.Move(tmp, FilePath);
-                    return; // 成功
+                    return true; // 成功
                 }
                 catch (IOException) when (attempt < 3)
                 {
@@ -88,13 +88,14 @@ public class JsonStore : IDataStore
                 {
                     App.WriteCrashLog(new IOException($"数据保存失败(尝试 {attempt} 次)", ex));
                     try { File.Delete(tmp); } catch { /* 清理失败就算了 */ }
-                    return;
+                    return false;
                 }
             }
         }
         catch (Exception ex)
         {
             App.WriteCrashLog(ex);
+            return false;
         }
     }
 }

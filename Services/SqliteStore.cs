@@ -43,21 +43,29 @@ public class SqliteStore : IDataStore
         EnsureSchema(conn);
         EnsureColumns(conn);
 
+        // 审计加固:逐行 try/catch——单行损坏跳过该行(记日志),不再让整个 Load 中止导致空载启动
         using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = "SELECT id, content, created_at, archived, archived_at, card_width, card_height FROM notes";
             using var r = cmd.ExecuteReader();
             while (r.Read())
-                data.Notes.Add(new NoteItem
+                try
                 {
-                    Id = r.GetString(0),
-                    Content = r.IsDBNull(1) ? "" : r.GetString(1),
-                    CreatedAt = GetDate(r, 2),
-                    Archived = !r.IsDBNull(3) && r.GetInt64(3) != 0,
-                    ArchivedAt = r.IsDBNull(4) ? null : GetDate(r, 4),
-                    CardWidth = r.IsDBNull(5) ? 230 : r.GetDouble(5),
-                    CardHeight = r.IsDBNull(6) ? 150 : r.GetDouble(6),
-                });
+                    data.Notes.Add(new NoteItem
+                    {
+                        Id = r.IsDBNull(0) ? Guid.NewGuid().ToString() : r.GetString(0),
+                        Content = r.IsDBNull(1) ? "" : r.GetString(1),
+                        CreatedAt = GetDate(r, 2),
+                        Archived = !r.IsDBNull(3) && r.GetInt64(3) != 0,
+                        ArchivedAt = r.IsDBNull(4) ? null : GetDate(r, 4),
+                        CardWidth = r.IsDBNull(5) ? 230 : r.GetDouble(5),
+                        CardHeight = r.IsDBNull(6) ? 150 : r.GetDouble(6),
+                    });
+                }
+                catch (Exception ex)
+                {
+                    App.WriteCrashLog(new Exception($"notes 表存在损坏行,已跳过: {ex.Message}"));
+                }
         }
 
         using (var cmd = conn.CreateCommand())
@@ -66,25 +74,32 @@ public class SqliteStore : IDataStore
             using var r = cmd.ExecuteReader();
             while (r.Read())
             {
-                var subs = new List<SubTask>();
-                if (!r.IsDBNull(8))
+                try
                 {
-                    try { subs = JsonSerializer.Deserialize<List<SubTask>>(r.GetString(8)) ?? new(); }
-                    catch { /* 子任务列损坏就当没有 */ }
+                    var subs = new List<SubTask>();
+                    if (!r.IsDBNull(8))
+                    {
+                        try { subs = JsonSerializer.Deserialize<List<SubTask>>(r.GetString(8)) ?? new(); }
+                        catch { /* 子任务列损坏就当没有 */ }
+                    }
+                    data.Tasks.Add(new TaskItem
+                    {
+                        Id = r.IsDBNull(0) ? Guid.NewGuid().ToString() : r.GetString(0),
+                        Title = r.IsDBNull(1) ? "" : r.GetString(1),
+                        Content = r.IsDBNull(2) ? "" : r.GetString(2),
+                        Status = r.IsDBNull(3) ? "待开始" : r.GetString(3),
+                        CreatedAt = GetDate(r, 4),
+                        UpdatedAt = GetDate(r, 5),
+                        Archived = !r.IsDBNull(6) && r.GetInt64(6) != 0,
+                        ArchivedAt = r.IsDBNull(7) ? null : GetDate(r, 7),
+                        SubTasks = new ObservableCollection<SubTask>(subs),
+                        Tag = r.IsDBNull(9) ? "" : r.GetString(9),
+                    });
                 }
-                data.Tasks.Add(new TaskItem
+                catch (Exception ex)
                 {
-                    Id = r.GetString(0),
-                    Title = r.IsDBNull(1) ? "" : r.GetString(1),
-                    Content = r.IsDBNull(2) ? "" : r.GetString(2),
-                    Status = r.IsDBNull(3) ? "待开始" : r.GetString(3),
-                    CreatedAt = GetDate(r, 4),
-                    UpdatedAt = GetDate(r, 5),
-                    Archived = !r.IsDBNull(6) && r.GetInt64(6) != 0,
-                    ArchivedAt = r.IsDBNull(7) ? null : GetDate(r, 7),
-                    SubTasks = new ObservableCollection<SubTask>(subs),
-                    Tag = r.IsDBNull(9) ? "" : r.GetString(9),
-                });
+                    App.WriteCrashLog(new Exception($"tasks 表存在损坏行,已跳过: {ex.Message}"));
+                }
             }
         }
 
@@ -94,22 +109,29 @@ public class SqliteStore : IDataStore
             using var r = cmd.ExecuteReader();
             while (r.Read())
             {
-                var wasDone = !r.IsDBNull(2) && r.GetInt64(2) != 0;
-                var todo = new TodoItem
+                try
                 {
-                    Id = r.GetString(0),
-                    Title = r.IsDBNull(1) ? "" : r.GetString(1),
-                    IsDone = wasDone,
-                    Priority = r.IsDBNull(3) ? "普通" : r.GetString(3),
-                    DueDate = r.IsDBNull(4) ? null : GetDate(r, 4),
-                    CreatedAt = GetDate(r, 5),
-                    Archived = !r.IsDBNull(6) && r.GetInt64(6) != 0,
-                    ArchivedAt = r.IsDBNull(7) ? null : GetDate(r, 7),
-                };
-                // 库里的完成时间优先(IsDone setter 会盖成 Now,这里读回真实值)
-                if (wasDone && !r.IsDBNull(8))
-                    todo.CompletedAt = GetDate(r, 8);
-                data.Todos.Add(todo);
+                    var wasDone = !r.IsDBNull(2) && r.GetInt64(2) != 0;
+                    var todo = new TodoItem
+                    {
+                        Id = r.IsDBNull(0) ? Guid.NewGuid().ToString() : r.GetString(0),
+                        Title = r.IsDBNull(1) ? "" : r.GetString(1),
+                        IsDone = wasDone,
+                        Priority = r.IsDBNull(3) ? "普通" : r.GetString(3),
+                        DueDate = r.IsDBNull(4) ? null : GetDate(r, 4),
+                        CreatedAt = GetDate(r, 5),
+                        Archived = !r.IsDBNull(6) && r.GetInt64(6) != 0,
+                        ArchivedAt = r.IsDBNull(7) ? null : GetDate(r, 7),
+                    };
+                    // 库里的完成时间优先(IsDone setter 会盖成 Now,这里读回真实值)
+                    if (wasDone && !r.IsDBNull(8))
+                        todo.CompletedAt = GetDate(r, 8);
+                    data.Todos.Add(todo);
+                }
+                catch (Exception ex)
+                {
+                    App.WriteCrashLog(new Exception($"todos 表存在损坏行,已跳过: {ex.Message}"));
+                }
             }
         }
 
@@ -118,21 +140,29 @@ public class SqliteStore : IDataStore
             cmd.CommandText = "SELECT id, kind, title, payload, deleted_at FROM recycle";
             using var r = cmd.ExecuteReader();
             while (r.Read())
-                data.RecycleBin.Add(new RecycleItem
+                try
                 {
-                    Id = r.GetString(0),
-                    Kind = r.IsDBNull(1) ? "" : r.GetString(1),
-                    Title = r.IsDBNull(2) ? "" : r.GetString(2),
-                    PayloadJson = r.IsDBNull(3) ? "" : r.GetString(3),
-                    DeletedAt = GetDate(r, 4),
-                });
+                    data.RecycleBin.Add(new RecycleItem
+                    {
+                        Id = r.IsDBNull(0) ? Guid.NewGuid().ToString() : r.GetString(0),
+                        Kind = r.IsDBNull(1) ? "" : r.GetString(1),
+                        Title = r.IsDBNull(2) ? "" : r.GetString(2),
+                        PayloadJson = r.IsDBNull(3) ? "" : r.GetString(3),
+                        DeletedAt = GetDate(r, 4),
+                    });
+                }
+                catch (Exception ex)
+                {
+                    App.WriteCrashLog(new Exception($"recycle 表存在损坏行,已跳过: {ex.Message}"));
+                }
         }
 
         using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = "SELECT value FROM meta WHERE key = 'theme'";
             var v = cmd.ExecuteScalar() as string;
-            if (!string.IsNullOrEmpty(v))
+            // 审计加固:theme 白名单化,库里的垃圾值不再进入 ApplyTheme 的 Enum.Parse 路径
+            if (v == "Dark" || v == "Light")
                 data.Theme = v;
         }
 
@@ -168,7 +198,8 @@ public class SqliteStore : IDataStore
         return data;
     }
 
-    public void Save(WorkbenchData d)
+    // 返回 true = 事务已提交(迁移等调用方据此决定后续动作);失败仅记日志/告警,不上抛
+    public bool Save(WorkbenchData d)
     {
         try
         {
@@ -229,12 +260,14 @@ public class SqliteStore : IDataStore
                 ("$tags", JsonSerializer.Serialize(TagOptions.All)));
 
             tx.Commit();
+            return true;
         }
         catch (Exception ex)
         {
             // 写库失败不上抛炸 UI:记日志、弹一次可见告警,数据留在内存,下次操作再写
             App.WriteCrashLog(ex);
             App.NotifySaveFailure(ex);
+            return false;
         }
     }
 
@@ -283,6 +316,8 @@ public class SqliteStore : IDataStore
 
     private static void EnsureColumn(SqliteConnection conn, string table, string column, string ddlType)
     {
+        // 安全护栏(审计):table/column/ddlType 必须是编译期字面量——本方法不做标识符校验,
+        // 传入运行期字符串等于开放 SQL 注入。当前全部调用点为字面量,新增调用点请保持。
         var exists = false;
         using (var cmd = conn.CreateCommand())
         {
@@ -328,10 +363,17 @@ public class SqliteStore : IDataStore
             var legacy = JsonSerializer.Deserialize<WorkbenchData>(File.ReadAllText(_legacyJson));
             if (legacy is null) return;
 
-            // 复用 Save 的写库逻辑
-            Save(legacy);
-            File.Move(_legacyJson, _legacyJsonDone);
-            App.Trace("sqlite: 旧 data.json 已迁移到 workbench.db");
+            // 复用 Save 的写库逻辑;审计修复:确认写库成功后才改名旧 JSON,
+            // 否则写库失败时 data.json 被改名隐藏而 DB 为空(旧数据找不回)
+            if (Save(legacy))
+            {
+                File.Move(_legacyJson, _legacyJsonDone);
+                App.Trace("sqlite: 旧 data.json 已迁移到 workbench.db");
+            }
+            else
+            {
+                App.Trace("sqlite: 迁移写库失败,data.json 保留原位,下次启动重试");
+            }
         }
         catch (Exception ex)
         {

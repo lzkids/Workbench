@@ -6,5 +6,7 @@ namespace Workbench.Services;
 public interface IDataStore
 {
     WorkbenchData Load();
-    void Save(WorkbenchData data);
+
+    // 返回 true = 已成功落盘(调用方可据此决定后续动作,如迁移改名);失败仅记日志不上抛
+    bool Save(WorkbenchData data);
 }

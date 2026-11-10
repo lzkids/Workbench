@@ -193,7 +193,7 @@ public class SettingsViewModel : ObservableObject
             AppSettings.SetDataDir(useDefault ? null : target);
 
             // 4) 重启生效(避免各页面的视图绑定残留旧集合)
-            Dialog.Info("更改完成", "数据已复制,应用即将重启。");
+            Dialog.Info("更改完成", "数据已复制,应用即将重启。\n\n旧目录的完整副本保留在:\n" + current + "\n(确认新位置一切正常后,可自行清理)");
             var exe = Environment.ProcessPath
                 ?? throw new InvalidOperationException("无法确定 exe 路径");
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
