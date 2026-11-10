@@ -79,8 +79,8 @@ public partial class App : Application
         // 审计修复:argv 只接受精确形式(island / island=left|right|bottom),不再 StartsWith 宽松匹配;
         // island.json 的 edge 由 LoadIslandState 白名单化,此处不再 Enum.Parse 任意字符串
         var islandArg = e.Args.FirstOrDefault(a => a == "island" || a.StartsWith("island="));
-        var (savedEdge, savedOffset, savedScale) = IslandController.LoadIslandState();
-        bool startIsland = islandArg is not null || savedEdge is not null;
+        var (savedEdge, savedOffset, savedScale, savedVertical, savedFreeX, savedFreeY) = IslandController.LoadIslandState();
+        bool startIsland = islandArg is not null || savedEdge is not null || savedFreeX is not null;
         if (!startIsland)
         {
             main.Show();
@@ -88,6 +88,7 @@ public partial class App : Application
         }
         else
         {
+            // island= 指定了边 → 用指定边;否则恢复上次姿态(贴边态用 savedEdge,自由态 edge=null)
             var edge = islandArg switch
             {
                 "island=left" => IslandEdge.Left,
@@ -97,16 +98,16 @@ public partial class App : Application
                 {
                     "Left" => IslandEdge.Left,
                     "Bottom" => IslandEdge.Bottom,
-                    _ => IslandEdge.Right,
+                    _ => (IslandEdge?)null,
                 },
             };
-            islandController.EnterIslandMode(edge, savedOffset, savedScale);
-            Trace($"island mode entered: {edge} (arg={islandArg ?? "saved"}, offset={savedOffset?.ToString() ?? "center"}, scale={savedScale?.ToString() ?? "1"})");
+            islandController.EnterIslandMode(edge, savedOffset, savedScale, savedVertical, savedFreeX, savedFreeY);
+            Trace($"island mode entered: {edge?.ToString() ?? "free"} (arg={islandArg ?? "saved"}, offset={savedOffset?.ToString() ?? "center"}, scale={savedScale?.ToString() ?? "1"})");
         }
-        if (e.Args.Contains("popout"))
+        if (e.Args.Contains("capture"))
         {
-            islandController.OpenPopout("notes");
-            Trace("popout opened: notes");
+            islandController.OpenQuickCapture("notes");
+            Trace("capture opened: notes");
         }
 
         // 测试钩子:同步执行(与点击按钮完全等价)。之前的 BeginInvoke(ApplicationIdle)
@@ -177,13 +178,11 @@ public partial class App : Application
             long afterIslandHeap = GcHeap();
             var afterIslandWindows = Application.Current.Windows.Count;
 
-            const int popoutCycles = 20;
-            for (var i = 0; i < popoutCycles; i++)
+            const int stickyCycles = 20;
+            for (var i = 0; i < stickyCycles; i++)
             {
-                controller.OpenPopout("notes");
-                controller.OpenPopout("tasks");
-                controller.OpenPopout("todos");
-                controller.CloseAllPopouts();
+                controller.OpenQuickCapture("notes"); // 开新置顶小窗(非模态)
+                foreach (var w in Application.Current.Windows.OfType<StickyWindow>().ToList()) w.Close();
                 Application.Current.Dispatcher.Invoke(DispatcherPriority.Background, new Action(() => { }));
             }
             long endHeap = GcHeap();
@@ -195,7 +194,7 @@ public partial class App : Application
                 && afterIslandWindows == baseWindows && endWindows == baseWindows;
 
             Trace($"memtest: island×{islandCycles} Δheap={islandDeltaMb:F2}MB, " +
-                  $"windows {baseWindows}->{afterIslandWindows}; popout×{popoutCycles} Δheap={popoutDeltaMb:F2}MB, " +
+                  $"windows {baseWindows}->{afterIslandWindows}; sticky×{stickyCycles} Δheap={popoutDeltaMb:F2}MB, " +
                   $"windows->{endWindows}; {sw.ElapsedMilliseconds}ms");
             Trace(pass ? "memtest: PASS" : "memtest: FAIL");
         }

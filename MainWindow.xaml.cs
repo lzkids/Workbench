@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.IO;
 using System.Windows;
 using System.Windows.Media.Animation;
 using Wpf.Ui.Controls;
@@ -55,8 +56,14 @@ public partial class MainWindow : FluentWindow
     // 右下角常驻图标:左键点击还原完整工作台,右键出菜单(打开/灵动岛/退出)
     private void CreateTrayIcon()
     {
+        // 诊断实录:直接从 pack 流构造的 System.Drawing.Icon 在本机 shell 上不显示。
+        // 改为把包内 app.ico 提取到 exe 旁文件,从文件构造(外壳对文件路径图标兼容性最好)
         var sri = Application.GetResourceStream(new Uri("pack://application:,,,/Assets/app.ico"))
                   ?? throw new InvalidOperationException("Assets/app.ico 资源缺失");
+        var iconFile = Path.Combine(AppContext.BaseDirectory, "workbench.tray.ico");
+        using (var fs = File.Create(iconFile))
+            sri.Stream.CopyTo(fs);
+
         var menu = new WinForms.ContextMenuStrip();
         menu.Items.Add("打开工作台", null, (s, _) => RestoreFromTray());
         menu.Items.Add("进入灵动岛", null, (s, _) => ToggleIslandFromTray());
@@ -65,7 +72,7 @@ public partial class MainWindow : FluentWindow
 
         _trayIcon = new WinForms.NotifyIcon
         {
-            Icon = new System.Drawing.Icon(sri.Stream),
+            Icon = new System.Drawing.Icon(iconFile),
             Text = "工作台",
             Visible = true,
             ContextMenuStrip = menu,
@@ -76,7 +83,7 @@ public partial class MainWindow : FluentWindow
         };
     }
 
-    // 从托盘还原:岛开着就还原成完整软件,否则显示主窗口
+    // 从托盘/小胶囊还原:岛开着就还原成完整软件,否则显示主窗口
     public void RestoreFromTray()
     {
         if (_islandController is { } c && c.IsIslandOpen)
@@ -84,12 +91,20 @@ public partial class MainWindow : FluentWindow
             c.ExitIslandMode();
             return;
         }
+        _islandController?.HideMiniPresence();
         Show();
         if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
         Activate();
     }
 
-    // 托盘菜单的灵动岛入口:开着就还原,没开就按上次贴边进入
+    // ✕ 分流的"最小化到托盘":隐藏主窗,右下角显示存在感小胶囊(系统托盘图标在本机被压制)
+    private void MinimizeToTray()
+    {
+        Hide();
+        _islandController?.ShowMiniPresence();
+    }
+
+    // 托盘菜单的灵动岛入口:开着就还原,没开就按上次姿态(贴边/自由)进入
     private void ToggleIslandFromTray()
     {
         if (_islandController is null) return;
@@ -98,21 +113,23 @@ public partial class MainWindow : FluentWindow
             _islandController.ExitIslandMode();
             return;
         }
-        var (edgeStr, offset, scale) = IslandController.LoadIslandState();
+        var (edgeStr, offset, scale, vertical, freeX, freeY) = IslandController.LoadIslandState();
         var edge = edgeStr switch
         {
             "Left" => IslandEdge.Left,
             "Bottom" => IslandEdge.Bottom,
-            _ => IslandEdge.Right,
+            "Right" => IslandEdge.Right,
+            _ => (IslandEdge?)null,
         };
-        _islandController.EnterIslandMode(edge, offset, scale);
+        _islandController.EnterIslandMode(edge, offset, scale, vertical, freeX, freeY);
     }
 
-    // 真实退出:跳过最小化询问,关闭时连带收掉岛与弹窗
+    // 真实退出:跳过最小化询问,关闭时连带收掉岛、小胶囊与置顶便签
     public void ExitApplication()
     {
         _forceExit = true;
         Close();
+        Application.Current.Shutdown();
     }
 
     // ✕ 按钮:按用户偏好分流——直接退出 / 最小化到托盘 / 每次询问
@@ -124,7 +141,7 @@ public partial class MainWindow : FluentWindow
             if (action == "minimize")
             {
                 e.Cancel = true;
-                Hide(); // 托盘图标还在,应用继续常驻
+                MinimizeToTray();
                 return;
             }
             if (action == "ask")
@@ -135,15 +152,20 @@ public partial class MainWindow : FluentWindow
                 if (ask.Choice == "minimize")
                 {
                     e.Cancel = true;
-                    Hide();
+                    MinimizeToTray();
                     return;
                 }
-                // exit → 继续走真实关闭
             }
+            // 直接退出 → 标记真退出
+            _forceExit = true;
         }
         _trayIcon?.Dispose(); // 真退出:清掉托盘图标,防止残留幽灵图标
         _trayIcon = null;
         base.OnClosing(e);
+        // 审计反馈的"完整退出":主窗关闭后连带关掉置顶便签等全部窗口,
+        // 否则 ShutdownMode=OnLastWindowClose 会因残留置顶窗而继续驻留后台
+        if (_forceExit)
+            Application.Current.Shutdown();
     }
 
     private MainViewModel Vm => (MainViewModel)DataContext;
@@ -213,11 +235,11 @@ public partial class MainWindow : FluentWindow
 
     private void ThemeToggle_Click(object sender, RoutedEventArgs e) => ToggleTheme();
 
-    // 底部按钮已改图标-only:图标和悬停提示都显示"要切到"的目标模式
+    // 底部按钮已改 SymbolIcon-only:图标和悬停提示都显示"要切到"的目标模式
     private void UpdateThemeButton()
     {
         bool dark = App.Data.Theme == "Dark";
-        ThemeGlyph.Text = dark ? "☀️" : "🌙";
+        ThemeSymbol.Symbol = dark ? SymbolRegular.WeatherSunny24 : SymbolRegular.WeatherMoon24;
         ThemeToggle.ToolTip = dark ? "浅色模式" : "深色模式";
     }
 }

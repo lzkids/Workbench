@@ -20,6 +20,13 @@ public partial class StickyWindow : Window
             DragMove();
     }
 
+    // 🎨 换色:与便签卡片共用同一套配色菜单
+    private void PickColor_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement anchor && DataContext is NoteItem note)
+            Views.NoteColorMenu.Show(anchor, note);
+    }
+
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
 
     private void NewNote_Click(object sender, RoutedEventArgs e)

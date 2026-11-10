@@ -11,6 +11,10 @@ public class NoteItem : ObservableObject
     public bool Archived { get; set; }
     public DateTime? ArchivedAt { get; set; }
 
+    // 卡片配色:NoteColors 里的 Key(老数据缺省 = yellow)
+    private string _colorKey = "yellow";
+    public string ColorKey { get => _colorKey; set => SetProperty(ref _colorKey, value); }
+
     // 卡片尺寸(右下角拖拽调整,持久化)
     private double _cardWidth = 230;
     public double CardWidth

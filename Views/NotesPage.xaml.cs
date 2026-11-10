@@ -30,6 +30,13 @@ public partial class NotesPage : UserControl
         }
     }
 
+    // 🎨 按钮 → 弹出配色菜单;选中即改 ColorKey(自动保存 + 显式落盘双保险)
+    private void PickColor_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: NoteItem note } anchor)
+            NoteColorMenu.Show(anchor, note);
+    }
+
     // 卡片编辑完(焦点离开)就落盘,防止编辑后直接关程序丢数据
     private void NoteEdit_LostFocus(object sender, RoutedEventArgs e) => App.Persist();
 

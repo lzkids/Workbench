@@ -35,9 +35,9 @@
                       Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
 
             <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
-                <ui:Button Content="最小化到托盘" Appearance="Primary"
+                <ui:Button Content="最小化到托盘" Appearance="Secondary"
                            Padding="20,5" Margin="0,0,8,0" Click="Minimize_Click"/>
-                <ui:Button Content="直接退出" Appearance="Secondary"
+                <ui:Button Content="直接退出" Appearance="Danger"
                            Padding="20,5" Click="Exit_Click"/>
             </StackPanel>
         </Grid>

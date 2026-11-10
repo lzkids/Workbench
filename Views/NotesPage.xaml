@@ -5,6 +5,8 @@
              xmlns:local="clr-namespace:Workbench.Views">
 
     <UserControl.Resources>
+        <local:NoteColorBrushConverter x:Key="NoteBrush"/>
+
         <!-- 便签卡片工具按钮:浅底深棕字(卡片永远是黄底,与深浅主题无关,永远清晰) -->
         <Style x:Key="StickyToolButton" TargetType="Button">
             <Setter Property="Width" Value="22"/>
@@ -55,7 +57,9 @@
                         <DataTemplate>
                             <!-- 便签卡片保持黄色纸片风格(独立于深浅主题) -->
                         <Border Width="{Binding CardWidth}" Height="{Binding CardHeight}"
-                                Background="#FEF3A2" CornerRadius="8"
+                                Background="{Binding ColorKey, Converter={StaticResource NoteBrush}}"
+                                BorderBrush="{Binding ColorKey, Converter={StaticResource NoteBrush}, ConverterParameter=border}"
+                                BorderThickness="1" CornerRadius="8"
                                 Margin="0,0,12,12" Padding="10">
                             <Border.Effect>
                                 <DropShadowEffect BlurRadius="12" ShadowDepth="2" Direction="270"
@@ -64,6 +68,8 @@
                             <Grid>
                                 <DockPanel>
                                     <DockPanel DockPanel.Dock="Top">
+                                        <Button DockPanel.Dock="Right" Content="🎨" Style="{StaticResource StickyToolButton}"
+                                                ToolTip="更换颜色" Click="PickColor_Click"/>
                                         <Button DockPanel.Dock="Right" Content="⤢" Style="{StaticResource StickyToolButton}"
                                                 ToolTip="打开置顶小窗编辑(已打开则置前)" Click="OpenSticky_Click"/>
                                         <Button DockPanel.Dock="Right" Content="✕" Style="{StaticResource StickyToolButton}"
@@ -75,13 +81,17 @@
                                                 Command="{Binding DataContext.ArchiveCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                 CommandParameter="{Binding}"/>
                                         <TextBlock Text="{Binding CreatedAt, StringFormat={}{0:MM-dd HH:mm}}"
-                                                   FontSize="11" Foreground="#8A7B2E" VerticalAlignment="Center"/>
+                                                   FontSize="11"
+                                                   Foreground="{Binding ColorKey, Converter={StaticResource NoteBrush}, ConverterParameter=accent}"
+                                                   VerticalAlignment="Center"/>
                                     </DockPanel>
                                     <!-- 卡片即编辑:点击直接打字,输完即存(数据已在内存,窗口关闭/切页时落盘) -->
                                     <TextBox Text="{Binding Content, UpdateSourceTrigger=PropertyChanged}"
                                              Background="Transparent" BorderThickness="0"
                                              AcceptsReturn="True" TextWrapping="Wrap"
-                                             FontSize="13" Foreground="#3D3617" CaretBrush="#5A5020"
+                                             FontSize="13"
+                                             Foreground="{Binding ColorKey, Converter={StaticResource NoteBrush}, ConverterParameter=fg}"
+                                             CaretBrush="{Binding ColorKey, Converter={StaticResource NoteBrush}, ConverterParameter=accent}"
                                              VerticalScrollBarVisibility="Auto" Margin="0,6,0,0"
                                              LostFocus="NoteEdit_LostFocus"/>
                                 </DockPanel>

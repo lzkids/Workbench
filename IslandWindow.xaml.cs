@@ -9,19 +9,19 @@ using Point = System.Windows.Point;
 
 namespace Workbench;
 
-// 灵动岛胶囊窗:贴边悬浮、置顶;鼠标靠近(不用碰到)自动放大;
-// 三个入口弹出对应独立窗口;左键拖动沿边滑动(松手回吸并上报偏移);
-// 拖边缘等比缩放(离中心越远越大,松手上报);双击或右键还原主窗口
+// 灵动岛胶囊窗:置顶悬浮;鼠标靠近(不用碰到)自动放大;三个入口弹出快速记录窗;
+// 左键拖动完全自由移动,松手时靠近左/右/下边缘则吸附成贴边态,否则保持自由位置;双击或右键还原主窗口
 public partial class IslandWindow : Window
 {
     // 鼠标距胶囊多近算"靠近"(物理像素);靠近放大比例
     private const double ProximityPx = 36;
     private const double EnlargeScale = 1.18;
 
-    // 拖边缘调大小:边缘感应带(DIP)与缩放范围
+    // 拖边缘调大小:边缘感应带(DIP)与缩放范围;拖动松手后的贴边吸附距离
     private const double ResizeBand = 7;
     private const double ScaleMin = 0.6;
     private const double ScaleMax = 2.4;
+    private const double SnapDistance = 12;
 
     // 窗口内透明边距(XAML Grid Margin),胶囊本体相对窗口的偏移,Place/偏移换算全依赖它
     private const double MarginX = 28;
@@ -29,14 +29,19 @@ public partial class IslandWindow : Window
 
     private readonly Action<string> _onItem;
     private readonly Action _onRestore;
-    private readonly Action<double, double> _onGeometry; // (沿边偏移, 缩放) 拖动/缩放结束后上报持久化
+    private readonly Action _onPersist; // 松手/缩放结束后由控制器读取 CaptureState() 持久化
     private readonly DispatcherTimer _proximityTimer;
     private bool _enlarged;
-    private IslandEdge _edge;
+
+    // edge = null 表示自由悬浮(不贴边);贴边态用 offset 定位,自由态用 freeX/freeY 定位
+    private IslandEdge? _edge;
     private Rect _wa;
     private double _dpi = 1;
-    private double? _offset; // 沿边偏移(DIP);null = 居中
+    private double? _offset;
     private double _scale = 1;
+    private double? _freeX;
+    private double? _freeY;
+    public bool IsVertical { get; private set; }
 
     // 拖边缘缩放进行中的状态
     private bool _resizing;
@@ -45,13 +50,13 @@ public partial class IslandWindow : Window
     private double _resizeStartScale;
 
     public IslandWindow(IReadOnlyList<(string Key, string Glyph, string Label)> entries,
-                        bool vertical, Action<string> onItem, Action onRestore,
-                        Action<double, double> onGeometry)
+                        bool vertical, Action<string> onItem, Action onRestore, Action onPersist)
     {
         InitializeComponent();
         _onItem = onItem;
         _onRestore = onRestore;
-        _onGeometry = onGeometry;
+        _onPersist = onPersist;
+        IsVertical = vertical;
 
         ItemsHost.Orientation = vertical ? Orientation.Vertical : Orientation.Horizontal;
         foreach (var entry in entries)
@@ -91,12 +96,12 @@ public partial class IslandWindow : Window
         restore.Click += (_, _) => _onRestore();
         menu.Items.Add(restore);
         Pill.ContextMenu = menu;
-        Pill.ToolTip = "拖动沿边移动 · 拖边缘调整大小 · 双击/右键还原完整软件";
+        Pill.ToolTip = "拖动移动 · 靠近边缘吸附 · 拖边缘调整大小 · 双击/右键还原完整软件";
 
         _proximityTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(90) };
         _proximityTimer.Tick += (_, _) => UpdateEnlarge();
 
-        SizeChanged += (_, _) => Place(); // LayoutTransform 缩放改变窗口尺寸 → 重新吸附
+        SizeChanged += (_, _) => Place(); // LayoutTransform 缩放改变窗口尺寸 → 重新定位
 
         Loaded += (_, _) =>
         {
@@ -108,25 +113,38 @@ public partial class IslandWindow : Window
         ContentRendered += (_, _) => Place(); // 尺寸确定后吸附到位
     }
 
-    // 控制器告知贴哪条边、哪块工作区(DIP)、DPI 缩放、上次沿边偏移与缩放
-    public void SetAnchor(IslandEdge edge, Rect workArea, double dpi, double? offset, double? scale)
+    // 控制器告知工作区(DIP)、DPI、初始姿态。edge=null 表示自由悬浮(用 freeX/freeY)
+    public void SetAnchor(IslandEdge? edge, Rect workArea, double dpi,
+                          double? offset, double? scale, double? freeX, double? freeY)
     {
         _edge = edge;
         _wa = workArea;
         _dpi = dpi <= 0 ? 1 : dpi;
         _offset = offset;
+        _freeX = freeX;
+        _freeY = freeY;
         _scale = Math.Clamp(scale ?? 1, ScaleMin, ScaleMax);
         BodyScale.ScaleX = BodyScale.ScaleY = _scale;
     }
 
     public Rect Anchor => _wa;
 
-    public double CurrentScale => _scale;
+    public (IslandEdge? Edge, double? Offset, double Scale, double? FreeX, double? FreeY, bool Vertical) CaptureState()
+        => (_edge, _edge is null ? null : CurrentOffset(), _scale,
+            _edge is null ? Left - _wa.Left : null, _edge is null ? Top - _wa.Top : null, IsVertical);
 
-    // 吸附到锚定边缘;_offset 为空时沿边居中
+    // 吸附定位:贴边态按 offset(空 = 沿边居中),自由态用记住的位置(夹回屏幕内)
     public void Place()
     {
         if (_wa.IsEmpty || ActualWidth <= 0) return;
+        if (_edge is null)
+        {
+            var fw = _wa.Width - ActualWidth;
+            var fh = _wa.Height - ActualHeight;
+            Left = _wa.Left + Math.Clamp(_freeX ?? fw / 2, Math.Min(0, fw), Math.Max(0, fw));
+            Top = _wa.Top + Math.Clamp(_freeY ?? fh / 2, Math.Min(0, fh), Math.Max(0, fh));
+            return;
+        }
         switch (_edge)
         {
             case IslandEdge.Left:
@@ -156,7 +174,34 @@ public partial class IslandWindow : Window
         }
     }
 
-    // 当前沿边偏移(胶囊本体起点距工作区起点),拖动松手后上报控制器做持久化
+    // 拖动松手后的落位裁定:距左/右/下边缘吸附距离内 → 吸附成贴边态并换算沿边偏移;否则自由悬浮
+    private void SettleAfterDrag()
+    {
+        var bodyLeft = Left + MarginX;
+        var bodyRight = bodyLeft + (ActualWidth - 2 * MarginX);
+        var bodyBottom = Top + MarginY + (ActualHeight - 2 * MarginY);
+
+        if (bodyLeft - _wa.Left <= SnapDistance)
+            _edge = IslandEdge.Left;
+        else if (_wa.Right - bodyRight <= SnapDistance)
+            _edge = IslandEdge.Right;
+        else if (_wa.Bottom - bodyBottom <= SnapDistance)
+            _edge = IslandEdge.Bottom;
+        else
+            _edge = null;
+
+        if (_edge is null)
+        {
+            _freeX = Left - _wa.Left;
+            _freeY = Top - _wa.Top;
+        }
+        else
+        {
+            _offset = CurrentOffset();
+        }
+    }
+
+    // 当前沿边偏移(贴边态):胶囊本体起点距工作区起点
     private double? CurrentOffset()
     {
         if (_wa.IsEmpty) return null;
@@ -173,8 +218,9 @@ public partial class IslandWindow : Window
         {
             if (e.ClickCount >= 2) { _onRestore(); return; }
             try { DragMove(); } catch (InvalidOperationException) { }
+            SettleAfterDrag(); // 审计修复:不再无条件回中——按落点吸附贴边或保持自由位置
             Place();
-            _onGeometry(CurrentOffset() ?? 0, _scale);
+            _onPersist();
             return;
         }
 
@@ -213,10 +259,8 @@ public partial class IslandWindow : Window
         if (!_resizing) return;
         _resizing = false;
         Pill.ReleaseMouseCapture();
-        // 中心锚换算回沿边偏移,交给 Place 夹回工作区,然后持久化
-        _offset = OffsetFromCenter();
-        Place();
-        _onGeometry(CurrentOffset() ?? 0, _scale);
+        RepositionKeepingCenter(); // 中心锚换算回位置并持久化
+        _onPersist();
     }
 
     private void Pill_LostMouseCapture(object sender, MouseEventArgs e)

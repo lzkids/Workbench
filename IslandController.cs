@@ -1,7 +1,6 @@
 using System.IO;
 using System.Text.Json;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using Wpf.Ui.Controls;
@@ -14,8 +13,9 @@ namespace Workbench;
 
 public enum IslandEdge { Left, Right, Bottom } // 顶边留给系统最大化,不做贴边
 
-// 灵动岛总控:主窗口拖到屏幕左/右/下边缘静止片刻 → 化岛(便签/任务记录/待办三个入口);
-// 点岛上的入口弹出对应页面的独立窗口(主窗口保持隐藏);还原时主窗口回到化岛前的位置
+// 灵动岛总控:主窗口拖到屏幕边缘或托盘菜单 → 化岛(便签/任务记录/待办三个快速记录入口);
+// 点岛上的入口直接弹快速记录窗(便签=置顶小窗/任务=编辑窗新建/待办=快速待办窗);
+// 岛支持贴边(左/右/下)与完全自由悬浮两种姿态,位置/大小/姿态持久化到 Data\island.json
 public class IslandController
 {
     // DIP:窗口边缘距工作区边缘小于该值算"贴边";按住不动这么久才真正化岛,防误触
@@ -26,8 +26,9 @@ public class IslandController
     private readonly DispatcherTimer _snapTimer;
     private IslandEdge? _pendingEdge;
     private IslandWindow? _island;
-    private IslandEdge _currentEdge;
-    private readonly Dictionary<string, Window> _popouts = new();
+    private IslandEdge? _currentEdge;
+    private bool _currentVertical;
+    private MiniPresenceWindow? _miniPresence;
     private Rect _boundsBeforeIsland;
 
     public IslandController(MainWindow main)
@@ -61,43 +62,37 @@ public class IslandController
         _snapTimer.Start();
     }
 
-    // offset:沿边偏移(DIP,null=居中);scale:缩放(null=1)。化岛即持久化,重启后按原样恢复
-    public void EnterIslandMode(IslandEdge edge, double? offset = null, double? scale = null)
+    // offset:沿边偏移(DIP,null=沿边居中);scale:缩放(null=1);edge=null + freeX/freeY = 自由悬浮。
+    // 化岛即持久化,重启后按原姿态恢复
+    public void EnterIslandMode(IslandEdge? edge, double? offset = null, double? scale = null,
+                                bool? vertical = null, double? freeX = null, double? freeY = null)
     {
         if (_island is not null) return;
         _snapTimer.Stop();
         var wa = WorkAreaOf(_main, out var dpi);
-        App.Trace($"enter island: edge={edge} offset={offset} scale={scale} wa={wa} dpi={dpi}");
-        if (wa.IsEmpty)
-        {
-            App.Trace("enter island aborted: work area unknown");
-            return;
-        }
+        if (wa.IsEmpty) return;
 
         _currentEdge = edge;
-        SaveIslandState(edge.ToString(), offset, scale);
+        _currentVertical = vertical ?? edge is IslandEdge.Left or IslandEdge.Right;
+        SaveIslandState(edge?.ToString(), offset, scale, _currentVertical, freeX, freeY);
         _boundsBeforeIsland = new Rect(_main.Left, _main.Top, _main.Width, _main.Height);
+        HideMiniPresence();
         _main.Hide();
 
-        bool vertical = edge is IslandEdge.Left or IslandEdge.Right;
-        _island = new IslandWindow(Entries(), vertical, OpenPopout, ExitIslandMode, OnIslandGeometry);
-        _island.SetAnchor(edge, wa, dpi, offset, scale);
+        _island = new IslandWindow(Entries(), _currentVertical, OpenQuickCapture, ExitIslandMode, OnIslandPersist);
+        _island.SetAnchor(edge, wa, dpi, offset, scale, freeX, freeY);
         _island.Show();
     }
-
-    // 岛上拖动/缩放松手 → 记住新的沿边偏移与缩放
-    private void OnIslandGeometry(double offset, double scale)
-        => SaveIslandState(_currentEdge.ToString(), offset, scale);
 
     public void ExitIslandMode()
     {
         if (_island is null) return;
-        var wa = _island.Anchor;
         _island.Close();
         _island = null;
-        SaveIslandState(null, null, null); // 还原 = 清除持久化,下次完整窗口启动
+        SaveIslandState(null, null, null, _currentVertical, null, null); // 清除化岛持久化
 
         // 主窗口回到化岛前的位置,夹回当前工作区防止在屏幕外
+        var wa = _miniPresence?.Anchor ?? WorkAreaOf(_main, out _);
         var r = _boundsBeforeIsland;
         if (!wa.IsEmpty)
         {
@@ -113,6 +108,7 @@ public class IslandController
         _main.WindowState = WindowState.Normal;
         _main.Show();
         _main.Activate();
+        HideMiniPresence();
     }
 
     public void Shutdown()
@@ -120,14 +116,46 @@ public class IslandController
         _snapTimer.Stop();
         _island?.Close();
         _island = null;
-        foreach (var w in _popouts.Values.ToList()) w.Close();
-        _popouts.Clear();
+        HideMiniPresence();
     }
 
-    // 岛当前是否开着(托盘菜单分流用)
+    // 岛当前是否开着(托盘/胶囊菜单分流用)
     public bool IsIslandOpen => _island is not null;
 
-    // ===== 独立窗口 =====
+    // ===== 右下角存在感小胶囊 =====
+
+    // 最小化到托盘时的可见存在:系统托盘图标在本机被防护软件压制,用小胶囊兜底
+    public void ShowMiniPresence()
+    {
+        if (_miniPresence is { } m && m.IsLoaded) return;
+        _miniPresence = new MiniPresenceWindow(
+            () => _main.Dispatcher.Invoke(new Action(_main.RestoreFromTray)),
+            () => _main.Dispatcher.Invoke(new Action(() => ToggleIslandFromTray())),
+            () => _main.Dispatcher.Invoke(ExitApplication));
+        _miniPresence.SetPosition(WorkAreaOf(_main, out _));
+        _miniPresence.Show();
+    }
+
+    public void HideMiniPresence() => _miniPresence?.Close();
+
+    private void ToggleIslandFromTray()
+    {
+        if (_island is not null) { ExitIslandMode(); return; }
+        var (edgeStr, offset, scale, vertical, freeX, freeY) = LoadIslandState();
+        var edge = edgeStr switch
+        {
+            "Left" => IslandEdge.Left,
+            "Bottom" => IslandEdge.Bottom,
+            "Right" => IslandEdge.Right,
+            _ => (IslandEdge?)null,
+        };
+        EnterIslandMode(edge, offset, scale, vertical, freeX, freeY);
+    }
+
+    // 真实退出:跳过最小化询问,关闭时连带收掉岛与小胶囊
+    public void ExitApplication() => _main.ExitApplication();
+
+    // ===== 快速记录窗 =====
 
     private (string Key, string Glyph, string Label)[] Entries() => new[]
     {
@@ -136,72 +164,43 @@ public class IslandController
         ("todos", "✅", "待办"),
     };
 
-    // 点岛上的入口:同类型窗口单实例(已开则聚焦),与主窗口共享同一份 ViewModel
-    public void OpenPopout(string key)
+    // 点岛上的入口 → 快速记录窗(不再弹整页):
+    // 便签 = 直接开新置顶小窗;任务 = 编辑窗新建(标题/内容/子任务/标签);待办 = 快速待办窗
+    public void OpenQuickCapture(string key)
     {
-        if (_popouts.TryGetValue(key, out var existing))
+        switch (key)
         {
-            existing.Activate();
-            return;
+            case "notes":
+            {
+                var note = new NoteItem();
+                App.Data.Notes.Insert(0, note);
+                App.Persist();
+                var win = new StickyWindow(note) { Owner = _main, Topmost = true };
+                win.Show();
+                break;
+            }
+            case "tasks":
+            {
+                var task = new TaskItem { Title = "新任务", Status = "待开始" };
+                var win = new TaskEditWindow(task) { Owner = _main };
+                if (win.ShowDialog() == true)
+                {
+                    App.Data.Tasks.Insert(0, task);
+                    App.Persist();
+                }
+                break;
+            }
+            case "todos":
+            {
+                var win = new QuickTodoWindow { Owner = _main };
+                if (win.ShowDialog() == true)
+                {
+                    App.Data.Todos.Insert(0, win.Result);
+                    App.Persist();
+                }
+                break;
+            }
         }
-
-        var nav = key switch
-        {
-            "notes" => FindNav("便签"),
-            "tasks" => FindNav("任务记录"),
-            _ => FindNav("待办"),
-        };
-
-        // 页面到达钩子,与主窗口导航时保持一致
-        switch (nav.Page)
-        {
-            case NotesViewModel p: p.RefreshFilter(); break;
-            case TasksViewModel p: p.RefreshFilter(); break;
-            case TodosViewModel p: p.RefreshSort(); break;
-        }
-
-        var (title, width, height, content) = key switch
-        {
-            "notes" => ("便签", 560.0, 580.0, (FrameworkElement)new NotesPage()),
-            "tasks" => ("任务记录", 820.0, 560.0, (FrameworkElement)new TasksPage()),
-            _ => ("待办", 500.0, 580.0, (FrameworkElement)new TodosPage()),
-        };
-        content.DataContext = nav.Page;
-
-        var win = new FluentWindow
-        {
-            Title = title,
-            Icon = AppIcon(),
-            Width = width,
-            Height = height,
-            MinWidth = 420,
-            MinHeight = 400,
-            ExtendsContentIntoTitleBar = true,
-            WindowStartupLocation = WindowStartupLocation.Manual,
-        };
-
-        var grid = new Grid();
-        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        var titleBar = new TitleBar { Title = title };
-        var host = new ContentControl { Content = content, Margin = new Thickness(22, 16, 22, 16) };
-        Grid.SetRow(titleBar, 0);
-        Grid.SetRow(host, 1);
-        grid.Children.Add(titleBar);
-        grid.Children.Add(host);
-        win.Content = grid;
-
-        // 弹窗居中在灵动岛所在屏幕
-        var wa = _island?.Anchor ?? WorkAreaOf(_main, out _);
-        if (!wa.IsEmpty)
-        {
-            win.Left = wa.Left + (wa.Width - width) / 2;
-            win.Top = wa.Top + (wa.Height - height) / 2;
-        }
-
-        win.Closed += (_, _) => _popouts.Remove(key);
-        _popouts[key] = win;
-        win.Show();
     }
 
     // ===== 持久化:存 Data\island.json =====
@@ -209,11 +208,11 @@ public class IslandController
     // 而数据目录(SQLite 所在)一直放行,且随应用目录便携走
     private static string IslandStatePath => Path.Combine(App.DataDir, "island.json");
 
-    public static (string? Edge, double? Offset, double? Scale) LoadIslandState()
+    public static (string? Edge, double? Offset, double? Scale, bool? Vertical, double? FreeX, double? FreeY) LoadIslandState()
     {
         try
         {
-            if (!File.Exists(IslandStatePath)) return (null, null, null);
+            if (!File.Exists(IslandStatePath)) return (null, null, null, null, null, null);
             using var doc = JsonDocument.Parse(File.ReadAllText(IslandStatePath));
             var root = doc.RootElement;
             var edge = root.TryGetProperty("edge", out var e) && e.ValueKind == JsonValueKind.String
@@ -224,25 +223,42 @@ public class IslandController
                 ? o.GetDouble() : null;
             double? scale = root.TryGetProperty("scale", out var s) && s.ValueKind == JsonValueKind.Number
                 ? s.GetDouble() : null;
-            return (edge, offset, scale);
+            bool? vertical = root.TryGetProperty("vertical", out var vv) && vv.ValueKind == JsonValueKind.True
+                ? true : root.TryGetProperty("vertical", out var vf) && vf.ValueKind == JsonValueKind.False
+                ? false : null;
+            double? freeX = root.TryGetProperty("freeX", out var fx) && fx.ValueKind == JsonValueKind.Number
+                ? fx.GetDouble() : null;
+            double? freeY = root.TryGetProperty("freeY", out var fy) && fy.ValueKind == JsonValueKind.Number
+                ? fy.GetDouble() : null;
+            return (edge, offset, scale, vertical, freeX, freeY);
         }
         catch
         {
-            return (null, null, null);
+            return (null, null, null, null, null, null);
         }
     }
 
-    private static void SaveIslandState(string? edge, double? offset, double? scale)
+    private void OnIslandPersist()
+    {
+        if (_island is null) return;
+        var (edge, offset, scale, freeX, freeY, vertical) = _island.CaptureState();
+        _currentEdge = edge;
+        _currentVertical = vertical;
+        SaveIslandState(edge?.ToString(), offset, scale, vertical, freeX, freeY);
+    }
+
+    private static void SaveIslandState(string? edge, double? offset, double? scale,
+                                        bool? vertical, double? freeX, double? freeY)
     {
         try
         {
             Directory.CreateDirectory(App.DataDir);
-            if (string.IsNullOrWhiteSpace(edge))
+            if (string.IsNullOrWhiteSpace(edge) && freeX is null)
             {
                 if (File.Exists(IslandStatePath)) File.Delete(IslandStatePath);
                 return;
             }
-            var json = JsonSerializer.Serialize(new { edge, offset, scale });
+            var json = JsonSerializer.Serialize(new { edge, offset, scale, vertical, freeX, freeY });
             File.WriteAllText(IslandStatePath, json);
         }
         catch
@@ -250,15 +266,6 @@ public class IslandController
             // 持久化失败只影响"记住位置",不影响化岛本身
         }
     }
-
-    // 仅供 memtest:关闭全部弹窗(走正常 Closed 流程,清理字典)
-    public void CloseAllPopouts()
-    {
-        foreach (var w in _popouts.Values.ToList()) w.Close();
-    }
-
-    private NavigationItem FindNav(string title)
-        => ((MainViewModel)_main.DataContext).TopNavItems.First(i => i.Title == title);
 
     private static System.Windows.Media.ImageSource AppIcon()
         => new System.Windows.Media.Imaging.BitmapImage(new Uri("pack://application:,,,/Assets/app.ico"));
