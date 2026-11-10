@@ -27,12 +27,14 @@ public class SettingsViewModel : ObservableObject
             {
                 if (value) AutoStart.Enable();
                 else AutoStart.Disable();
+                Toast.Show(value ? "已开启开机自启" : "已关闭开机自启", "⚙️");
             }
             catch (Exception ex)
             {
                 _autoStart = !value;                 // 失败回滚开关状态
                 OnPropertyChanged(nameof(AutoStartEnabled));
                 App.WriteCrashLog(ex);
+                Toast.Show("自启设置失败,详情见日志", "⚠️");
             }
         }
     }
@@ -90,6 +92,7 @@ public class SettingsViewModel : ObservableObject
                 if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
                 AppSettings.SetExportDir(dlg.SelectedPath);
                 OnPropertyChanged(nameof(CurrentExportDir));
+                Toast.Show("导出默认文件夹已更新", "📁");
             }
             catch (Exception ex)
             {
@@ -227,7 +230,7 @@ public class SettingsViewModel : ObservableObject
             };
             if (dlg.ShowDialog() != true) return;
             exporter(dlg.FileName, App.Data);
-            Dialog.Info("导出成功", $"文件:{System.IO.Path.GetFileName(dlg.FileName)}");
+            Toast.Show($"已导出 {System.IO.Path.GetFileName(dlg.FileName)}", "📄");
         }
         catch (Exception ex)
         {

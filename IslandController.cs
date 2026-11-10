@@ -152,6 +152,7 @@ public class IslandController
             _ => (IslandEdge?)null,
         };
         EnterIslandMode(edge, offset, scale, vertical, freeX, freeY);
+        Toast.Show("已进入灵动岛", "🏝️");
     }
 
     // 真实退出:跳过最小化询问,关闭时连带收掉岛与小胶囊

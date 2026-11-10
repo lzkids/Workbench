@@ -151,6 +151,7 @@ public partial class MainWindow : FluentWindow
             _ => (IslandEdge?)null,
         };
         _islandController.EnterIslandMode(edge, offset, scale, vertical, freeX, freeY);
+        Toast.Show("已进入灵动岛", "🏝️");
     }
 
     // 真实退出:跳过最小化询问,关闭时连带收掉岛、小胶囊与置顶便签
