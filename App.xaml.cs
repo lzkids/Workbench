@@ -70,15 +70,17 @@ public partial class App : Application
         var main = new MainWindow { DataContext = new MainViewModel(page) };
         Trace("window constructed");
 
-        // 灵动岛总控:主窗口拖到屏幕左/右/下边缘化岛
+        // 灵动岛总控:主窗口拖到屏幕边缘(左/右/上/下)或托盘菜单 → 化岛
         var islandController = new IslandController(main);
         main.AttachIsland(islandController);
         Trace("island controller attached");
 
         // 上次化过岛 → 直接以灵动岛启动(主窗口不闪现);island= 测试钩子优先。
-        // 审计修复:argv 只接受精确形式(island / island=left|right|bottom),不再 StartsWith 宽松匹配;
-        // island.json 的 edge 由 LoadIslandState 白名单化,此处不再 Enum.Parse 任意字符串
-        var islandArg = e.Args.FirstOrDefault(a => a == "island" || a.StartsWith("island="));
+        // 审计修复:argv 只接受精确形式(island / island=left|right|bottom|top)——门控与 switch 一致地用
+        // 精确集合匹配,未知 island=<x> 一律忽略(不算化岛指令,按 island.json 走常规启动恢复),
+        // 不再 StartsWith 宽松命中;island.json 的 edge 由 LoadIslandState 白名单化,此处不再 Enum.Parse 任意字符串
+        var islandArg = e.Args.FirstOrDefault(a => a == "island" || a == "island=left"
+            || a == "island=right" || a == "island=bottom" || a == "island=top");
         var (savedEdge, savedOffset, savedScale, savedVertical, savedFreeX, savedFreeY) = IslandController.LoadIslandState();
         bool startIsland = islandArg is not null || savedEdge is not null || savedFreeX is not null;
         if (!startIsland)
@@ -93,11 +95,14 @@ public partial class App : Application
             {
                 "island=left" => IslandEdge.Left,
                 "island=bottom" => IslandEdge.Bottom,
+                "island=top" => IslandEdge.Top,
                 "island" or "island=right" => IslandEdge.Right,
                 _ => savedEdge switch
                 {
                     "Left" => IslandEdge.Left,
+                    "Right" => IslandEdge.Right,
                     "Bottom" => IslandEdge.Bottom,
+                    "Top" => IslandEdge.Top,
                     _ => (IslandEdge?)null,
                 },
             };

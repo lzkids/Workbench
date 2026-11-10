@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Media.Animation;
 using Wpf.Ui.Controls;
 using Workbench.Services;
@@ -27,6 +29,26 @@ public partial class MainWindow : FluentWindow
         UpdateThemeButton();
         CreateTrayIcon();
 
+        // 顶边贴岛前置:拖到屏幕顶边松手,系统的 Aero Snap 会抢先最大化(窗口变大),
+        // 化岛定时器因 WindowState≠Normal 直接放弃——表现为"拖上去变大了,岛没了"。
+        // 摘掉 WS_MAXIMIZEBOX 样式位即按窗口禁用拖顶最大化;WPF-UI 自绘的最大化按钮
+        // 走 WindowState 属性设置,不经过这个样式位,不受影响
+        SourceInitialized += (_, _) =>
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            const int GWL_STYLE = -16, WS_MAXIMIZEBOX = 0x00010000;
+            var style = GetWindowLong(hwnd, GWL_STYLE);
+            // run-2 审计加固:GetWindowLong 失败返回 0,此时照常写回会把整窗样式清零——跳过并留痕
+            if (style == 0)
+            {
+                App.Trace("aero-snap-disable: GetWindowLong returned 0, style edit skipped");
+                return;
+            }
+            // SetWindowLong 失败返回 0(拖顶最大化未禁,化岛防抖会放弃=功能降级):留痕便于排查
+            if (SetWindowLong(hwnd, GWL_STYLE, style & ~WS_MAXIMIZEBOX) == 0)
+                App.Trace("aero-snap-disable: SetWindowLong failed, top-drag maximize stays enabled");
+        };
+
         // App 里是 new MainWindow { DataContext = ... },构造时还拿不到 VM;
         // 在 DataContextChanged 里挂选中同步钩子。先退订旧 VM 再订新 VM:
         // VM 持有窗口引用,重复挂会旧引用堆积累(理论上 DataContext 只设一次,这里做保险)
@@ -50,6 +72,12 @@ public partial class MainWindow : FluentWindow
         if (e.PropertyName == nameof(MainViewModel.Selected))
             SyncTopNavHighlight();
     }
+
+    [DllImport("user32.dll")]
+    private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll")]
+    private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
 
     // ===== 系统托盘 =====
 
@@ -119,6 +147,7 @@ public partial class MainWindow : FluentWindow
             "Left" => IslandEdge.Left,
             "Bottom" => IslandEdge.Bottom,
             "Right" => IslandEdge.Right,
+            "Top" => IslandEdge.Top,
             _ => (IslandEdge?)null,
         };
         _islandController.EnterIslandMode(edge, offset, scale, vertical, freeX, freeY);

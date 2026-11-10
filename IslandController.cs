@@ -11,11 +11,11 @@ using WinForms = System.Windows.Forms;
 
 namespace Workbench;
 
-public enum IslandEdge { Left, Right, Bottom } // 顶边留给系统最大化,不做贴边
+public enum IslandEdge { Left, Right, Bottom, Top } // 顶边也贴岛;拖顶的系统最大化已在主窗口摘 WS_MAXIMIZEBOX 禁掉
 
-// 灵动岛总控:主窗口拖到屏幕边缘或托盘菜单 → 化岛(便签/任务记录/待办三个快速记录入口);
+// 灵动岛总控:主窗口拖到屏幕边缘(左/右/上/下)或托盘菜单 → 化岛(便签/任务记录/待办三个快速记录入口);
 // 点岛上的入口直接弹快速记录窗(便签=置顶小窗/任务=编辑窗新建/待办=快速待办窗);
-// 岛支持贴边(左/右/下)与完全自由悬浮两种姿态,位置/大小/姿态持久化到 Data\island.json
+// 岛支持贴边(左/右/上/下)与完全自由悬浮两种姿态,位置/大小/姿态持久化到 Data\island.json
 public class IslandController
 {
     // DIP:窗口边缘距工作区边缘小于该值算"贴边";按住不动这么久才真正化岛,防误触
@@ -55,6 +55,7 @@ public class IslandController
         IslandEdge? edge =
             rect.Left - wa.Left <= SnapThreshold ? IslandEdge.Left :
             wa.Right - rect.Right <= SnapThreshold ? IslandEdge.Right :
+            wa.Top - rect.Top <= SnapThreshold ? IslandEdge.Top :
             wa.Bottom - rect.Bottom <= SnapThreshold ? IslandEdge.Bottom : null;
 
         if (edge is null) { _snapTimer.Stop(); _pendingEdge = null; return; }
@@ -147,6 +148,7 @@ public class IslandController
             "Left" => IslandEdge.Left,
             "Bottom" => IslandEdge.Bottom,
             "Right" => IslandEdge.Right,
+            "Top" => IslandEdge.Top,
             _ => (IslandEdge?)null,
         };
         EnterIslandMode(edge, offset, scale, vertical, freeX, freeY);
@@ -218,7 +220,7 @@ public class IslandController
             var edge = root.TryGetProperty("edge", out var e) && e.ValueKind == JsonValueKind.String
                 ? e.GetString() : null;
             // 审计加固:edge 白名单化——非合法边名一律回退 null(调用方用安全默认),杜绝任意字符串下游解析
-            edge = edge is "Left" or "Right" or "Bottom" ? edge : null;
+            edge = edge is "Left" or "Right" or "Bottom" or "Top" ? edge : null;
             double? offset = root.TryGetProperty("offset", out var o) && o.ValueKind == JsonValueKind.Number
                 ? o.GetDouble() : null;
             double? scale = root.TryGetProperty("scale", out var s) && s.ValueKind == JsonValueKind.Number

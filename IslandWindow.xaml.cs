@@ -10,7 +10,7 @@ using Point = System.Windows.Point;
 namespace Workbench;
 
 // 灵动岛胶囊窗:置顶悬浮;鼠标靠近(不用碰到)自动放大;三个入口弹出快速记录窗;
-// 左键拖动完全自由移动,松手时靠近左/右/下边缘则吸附成贴边态,否则保持自由位置;双击或右键还原主窗口
+// 左键拖动完全自由移动,松手时靠近左/右/上/下边缘则吸附成贴边态,否则保持自由位置;双击或右键还原主窗口
 public partial class IslandWindow : Window
 {
     // 鼠标距胶囊多近算"靠近"(物理像素);靠近放大比例
@@ -163,6 +163,14 @@ public partial class IslandWindow : Window
                 Left = _wa.Right - 6 - MarginX - (ActualWidth - 2 * MarginX);
                 break;
             }
+            case IslandEdge.Top:
+            {
+                var w = ActualWidth - 2 * MarginX;
+                var body = Math.Clamp(_offset ?? (_wa.Width - w) / 2, 0, Math.Max(0, _wa.Width - w));
+                Left = _wa.Left + body - MarginX;
+                Top = _wa.Top + 6 - MarginY;
+                break;
+            }
             case IslandEdge.Bottom:
             {
                 var w = ActualWidth - 2 * MarginX;
@@ -174,17 +182,20 @@ public partial class IslandWindow : Window
         }
     }
 
-    // 拖动松手后的落位裁定:距左/右/下边缘吸附距离内 → 吸附成贴边态并换算沿边偏移;否则自由悬浮
+    // 拖动松手后的落位裁定:距左/右/上/下边缘吸附距离内 → 吸附成贴边态并换算沿边偏移;否则自由悬浮
     private void SettleAfterDrag()
     {
         var bodyLeft = Left + MarginX;
         var bodyRight = bodyLeft + (ActualWidth - 2 * MarginX);
+        var bodyTop = Top + MarginY;
         var bodyBottom = Top + MarginY + (ActualHeight - 2 * MarginY);
 
         if (bodyLeft - _wa.Left <= SnapDistance)
             _edge = IslandEdge.Left;
         else if (_wa.Right - bodyRight <= SnapDistance)
             _edge = IslandEdge.Right;
+        else if (_wa.Top - bodyTop <= SnapDistance)
+            _edge = IslandEdge.Top;
         else if (_wa.Bottom - bodyBottom <= SnapDistance)
             _edge = IslandEdge.Bottom;
         else
@@ -259,14 +270,25 @@ public partial class IslandWindow : Window
         if (!_resizing) return;
         _resizing = false;
         Pill.ReleaseMouseCapture();
-        RepositionKeepingCenter(); // 中心锚换算回位置并持久化
+        if (_edge is null)
+        {
+            RepositionKeepingCenter(); // 自由态:中心锚换算回位置
+        }
+        else
+        {
+            // 贴边态(run-2 审计加固):中心锚缩放会让垂直于边的坐标漂离贴边(如左贴边岛放大后飘离 6px 贴距),
+            // 按当前中心位置换算沿边偏移后 Place() 吸回贴边,视觉/状态/存档三者保持一致
+            _offset = CurrentOffset();
+            Place();
+        }
         _onPersist();
     }
 
     private void Pill_LostMouseCapture(object sender, MouseEventArgs e)
     {
         if (!_resizing) return;
-        _resizing = false; // 捕获被抢走(切窗等):优雅收场
+        _resizing = false; // 捕获被抢走(切窗等):优雅收场——同上,保持沿边位置并吸回贴边
+        if (_edge is not null) _offset = CurrentOffset();
         Place();
     }
 
