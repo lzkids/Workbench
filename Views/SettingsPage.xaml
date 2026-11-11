@@ -142,6 +142,82 @@
                 </StackPanel>
             </ui:Card>
 
+            <!-- 云同步 (WebDAV) -->
+            <TextBlock Text="云同步 (WebDAV)" FontSize="15" FontWeight="Bold" Margin="0,0,0,10"
+                       Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+            <ui:Card Padding="14,12" Margin="0,0,0,20">
+                <StackPanel>
+                    <Grid Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="启用云同步" FontSize="14"
+                                       Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+                            <TextBlock Text="只同步主数据库(便签/任务/待办);退出自动上传,启动时云端有更新自动拉取。凭据与加密口令明文存本机 Data\webdav.json——口令保护的是云端内容,不是这个文件" FontSize="11.5" Margin="0,2,0,0" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                        </StackPanel>
+                        <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding CloudEnabled}"
+                                         VerticalAlignment="Center"/>
+                    </Grid>
+                    <TextBlock Text="服务器 URL" FontSize="12" Margin="0,0,0,4"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                    <ui:TextBox Text="{Binding CloudUrl, UpdateSourceTrigger=PropertyChanged}" Padding="6,4"
+                                Margin="0,0,0,8"/>
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="账号" FontSize="12" Margin="0,0,0,4"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                            <ui:TextBox Text="{Binding CloudUsername, UpdateSourceTrigger=PropertyChanged}" Padding="6,4"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="密码(坚果云请用「应用密码」)" FontSize="12" Margin="0,0,0,4"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                            <PasswordBox x:Name="CloudPasswordBox" Padding="6,4"
+                                         PasswordChanged="CloudPassword_Changed"/>
+                        </StackPanel>
+                    </Grid>
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="内容加密" FontSize="14"
+                                       Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+                            <TextBlock Text="上传前 AES-256 加密,云端(坚果云服务器)只存密文;换电脑恢复需填同一个加密密码" FontSize="11.5" Margin="0,2,0,0"
+                                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                        </StackPanel>
+                        <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding CloudEncrypt}"
+                                         VerticalAlignment="Center"/>
+                    </Grid>
+                    <TextBlock Text="加密密码(开启内容加密后生效,务必记住——云端没有它)" FontSize="12" Margin="0,0,0,4"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                    <PasswordBox x:Name="CloudCryptoBox" Padding="6,4" Margin="0,0,0,8"
+                                 PasswordChanged="CloudCrypto_Changed"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <ui:Button Content="测试连接" Appearance="Secondary" Padding="14,5" Margin="0,0,8,0"
+                                   Command="{Binding CloudTestCommand}" IsEnabled="{Binding CloudNotBusy}"/>
+                        <ui:Button Content="立即上传" Appearance="Primary" Padding="14,5" Margin="0,0,8,0"
+                                   Command="{Binding CloudPushCommand}" IsEnabled="{Binding CloudNotBusy}"
+                                   ToolTip="把当前数据快照推送到云端(云端旧版本自动留 .bak)"/>
+                        <ui:Button Content="从云端恢复" Appearance="Danger" Padding="14,5"
+                                   Command="{Binding CloudRestoreCommand}" IsEnabled="{Binding CloudNotBusy}"
+                                   ToolTip="用云端数据覆盖本地;当前本地数据会先备份到云端 .bak,重启生效"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding CloudStatus}" FontSize="11.5" TextWrapping="Wrap" Margin="0,0,0,4"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                    <TextBlock Text="{Binding CloudLastSync, StringFormat=上次同步: {0}}" FontSize="11.5"
+                               Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                </StackPanel>
+            </ui:Card>
+
             <!-- 关于 -->
             <TextBlock Text="关于" FontSize="15" FontWeight="Bold" Margin="0,0,0,10"
                        Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>

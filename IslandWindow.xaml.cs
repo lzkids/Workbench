@@ -10,7 +10,7 @@ using Point = System.Windows.Point;
 namespace Workbench;
 
 // 灵动岛胶囊窗:置顶悬浮;鼠标靠近(不用碰到)自动放大;三个入口弹出快速记录窗;
-// 左键拖动完全自由移动,松手时靠近左/右/上/下边缘则吸附成贴边态,否则保持自由位置;双击或右键还原主窗口
+// 左键拖动完全自由移动,松手时靠近左/右/上/下边缘则吸附成贴边态(跨轴换边自动重建横排↔竖排),否则保持自由位置;双击或右键还原主窗口
 public partial class IslandWindow : Window
 {
     // 鼠标距胶囊多近算"靠近"(物理像素);靠近放大比例
@@ -30,6 +30,7 @@ public partial class IslandWindow : Window
     private readonly Action<string> _onItem;
     private readonly Action _onRestore;
     private readonly Action _onPersist; // 松手/缩放结束后由控制器读取 CaptureState() 持久化
+    private readonly IReadOnlyList<(string Key, string Glyph, string Label)> _entries; // 换轴重建按钮用
     private readonly DispatcherTimer _proximityTimer;
     private bool _enlarged;
 
@@ -48,6 +49,7 @@ public partial class IslandWindow : Window
     private Point _resizeCenter; // 按下时胶囊中心(屏幕 DIP 坐标),缩放以它为锚
     private double _resizeStartDist;
     private double _resizeStartScale;
+    private double _smoothDist;  // EMA 平滑后的拖距(手抖抑制)
 
     public IslandWindow(IReadOnlyList<(string Key, string Glyph, string Label)> entries,
                         bool vertical, Action<string> onItem, Action onRestore, Action onPersist)
@@ -56,39 +58,9 @@ public partial class IslandWindow : Window
         _onItem = onItem;
         _onRestore = onRestore;
         _onPersist = onPersist;
+        _entries = entries;
         IsVertical = vertical;
-
-        ItemsHost.Orientation = vertical ? Orientation.Vertical : Orientation.Horizontal;
-        foreach (var entry in entries)
-        {
-            var btn = new Button
-            {
-                Style = (Style)Resources["PillItemStyle"],
-                ToolTip = entry.Label,
-            };
-            if (vertical)
-            {
-                btn.Content = new TextBlock { Text = entry.Glyph, FontSize = 15 };
-                btn.Margin = new Thickness(0, 3, 0, 3);
-            }
-            else
-            {
-                btn.Content = new StackPanel
-                {
-                    Orientation = Orientation.Horizontal,
-                    Children =
-                    {
-                        new TextBlock { Text = entry.Glyph, FontSize = 15 },
-                        new TextBlock { Text = entry.Label, FontSize = 12.5,
-                                        Margin = new Thickness(7, 0, 0, 0),
-                                        VerticalAlignment = VerticalAlignment.Center },
-                    }
-                };
-                btn.Margin = new Thickness(3, 0, 3, 0);
-            }
-            btn.Click += (_, _) => _onItem(entry.Key);
-            ItemsHost.Children.Add(btn);
-        }
+        ApplyOrientation();
 
         // 还原入口:右键菜单(双击也可,但拖动会偶发吞掉第二次点击,右键是可靠的主入口)
         var menu = new ContextMenu();
@@ -111,6 +83,43 @@ public partial class IslandWindow : Window
         };
         Closing += (_, _) => _proximityTimer.Stop();
         ContentRendered += (_, _) => Place(); // 尺寸确定后吸附到位
+    }
+
+    // 按当前轴重建入口按钮:竖排只留图标,横排图标+文字;构造与换边跨轴(顶/底 ↔ 左/右)时调用
+    private void ApplyOrientation()
+    {
+        ItemsHost.Orientation = IsVertical ? Orientation.Vertical : Orientation.Horizontal;
+        ItemsHost.Children.Clear();
+        foreach (var entry in _entries)
+        {
+            var btn = new Button
+            {
+                Style = (Style)Resources["PillItemStyle"],
+                ToolTip = entry.Label,
+            };
+            if (IsVertical)
+            {
+                btn.Content = new TextBlock { Text = entry.Glyph, FontSize = 15 };
+                btn.Margin = new Thickness(0, 3, 0, 3);
+            }
+            else
+            {
+                btn.Content = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Children =
+                    {
+                        new TextBlock { Text = entry.Glyph, FontSize = 15 },
+                        new TextBlock { Text = entry.Label, FontSize = 12.5,
+                                        Margin = new Thickness(7, 0, 0, 0),
+                                        VerticalAlignment = VerticalAlignment.Center },
+                    }
+                };
+                btn.Margin = new Thickness(3, 0, 3, 0);
+            }
+            btn.Click += (_, _) => _onItem(entry.Key);
+            ItemsHost.Children.Add(btn);
+        }
     }
 
     // 控制器告知工作区(DIP)、DPI、初始姿态。edge=null 表示自由悬浮(用 freeX/freeY)
@@ -194,12 +203,21 @@ public partial class IslandWindow : Window
             _edge = IslandEdge.Left;
         else if (_wa.Right - bodyRight <= SnapDistance)
             _edge = IslandEdge.Right;
-        else if (_wa.Top - bodyTop <= SnapDistance)
+        else if (bodyTop - _wa.Top <= SnapDistance)
             _edge = IslandEdge.Top;
         else if (_wa.Bottom - bodyBottom <= SnapDistance)
             _edge = IslandEdge.Bottom;
         else
             _edge = null;
+        App.Trace($"island settle: edge={_edge?.ToString() ?? "free"}");
+
+        // 换轴:横排边(顶/底)↔竖排边(左/右)之间拖动时重建布局;自由态不换轴
+        var vertical = _edge is IslandEdge.Left or IslandEdge.Right;
+        if (_edge is not null && vertical != IsVertical)
+        {
+            IsVertical = vertical;
+            ApplyOrientation(); // 实际尺寸经布局生效后由 SizeChanged → Place 再修正落位
+        }
 
         if (_edge is null)
         {
@@ -242,6 +260,7 @@ public partial class IslandWindow : Window
         var p = PointToScreen(e.GetPosition(this));
         _resizeStartDist = Math.Max(10, (p - _resizeCenter).Length);
         _resizeStartScale = _scale;
+        _smoothDist = _resizeStartDist;
     }
 
     private void Pill_MouseMove(object sender, MouseEventArgs e)
@@ -249,10 +268,15 @@ public partial class IslandWindow : Window
         if (_resizing)
         {
             var p = PointToScreen(e.GetPosition(this));
-            var dist = (p - _resizeCenter).Length;
-            if (dist > 10)
+            var raw = (p - _resizeCenter).Length;
+            // 手抖抑制:抓点离中心越近灵敏度天然越高(小岛抓边距中心仅几十像素,抖 5px≈12% 缩放),
+            // 裸乘会把抖动放大成"忽大忽小"。EMA 平滑拖距压高频抖动,再限单事件缩放步长(±0.04)
+            // 防瞬间跳到两端;持续拖动仍线性跟手
+            _smoothDist = _smoothDist * 0.65 + raw * 0.35;
+            if (_smoothDist > 10)
             {
-                var s = Math.Clamp(_resizeStartScale * dist / _resizeStartDist, ScaleMin, ScaleMax);
+                var target = Math.Clamp(_resizeStartScale * _smoothDist / _resizeStartDist, ScaleMin, ScaleMax);
+                var s = Math.Clamp(target, _scale - 0.04, _scale + 0.04);
                 if (!s.Equals(_scale))
                 {
                     _scale = s;

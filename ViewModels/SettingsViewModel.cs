@@ -1,4 +1,5 @@
 using System.IO;
+using System.Net.Http;
 using System.Windows;
 using Workbench.Models;
 using Workbench.Services;
@@ -76,6 +77,85 @@ public class SettingsViewModel : ObservableObject
     public RelayCommand ExportHtmlCommand { get; }
     public RelayCommand ExportPdfCommand { get; }
 
+    // ===== 云同步(WebDAV):只同步主数据库 workbench.db;凭据存 Data\webdav.json =====
+    // run-3 加固:配置写盘防抖(每键入即写盘 → 800ms 静止后一次写),云命令执行前强制冲刷
+    private readonly CloudSync.Config _cloud = CloudSync.LoadConfig();
+    private bool _cloudBusy;
+    private string _cloudStatus = "";
+    private readonly System.Windows.Threading.DispatcherTimer _configSaveTimer =
+        new() { Interval = TimeSpan.FromMilliseconds(800) };
+
+    private void ScheduleCloudSave()
+    {
+        _configSaveTimer.Stop();
+        _configSaveTimer.Start();
+    }
+
+    private void FlushCloudConfig()
+    {
+        _configSaveTimer.Stop();
+        CloudSync.SaveConfig(_cloud);
+    }
+
+    public bool CloudEnabled
+    {
+        get => _cloud.Enabled;
+        set { if (_cloud.Enabled != value) { _cloud.Enabled = value; ScheduleCloudSave(); OnPropertyChanged(); } }
+    }
+
+    public string CloudUrl
+    {
+        get => _cloud.Url;
+        set { if (_cloud.Url != value) { _cloud.Url = value; ScheduleCloudSave(); OnPropertyChanged(); } }
+    }
+
+    public string CloudUsername
+    {
+        get => _cloud.Username;
+        set { if (_cloud.Username != value) { _cloud.Username = value; ScheduleCloudSave(); OnPropertyChanged(); } }
+    }
+
+    // 由设置页代码后台从 PasswordBox 同步过来(Password 不是依赖属性,XAML 绑不了)
+    public string CloudPassword
+    {
+        get => _cloud.Password;
+        set { if (_cloud.Password != value) { _cloud.Password = value; ScheduleCloudSave(); OnPropertyChanged(); } }
+    }
+
+    // 内容加密:上传前 AES-256-GCM,云端只存密文;密码同步存本地配置(云端拿不到)
+    public bool CloudEncrypt
+    {
+        get => _cloud.Encrypt;
+        set { if (_cloud.Encrypt != value) { _cloud.Encrypt = value; ScheduleCloudSave(); OnPropertyChanged(); } }
+    }
+
+    public string CloudPassphrase
+    {
+        get => _cloud.Passphrase;
+        set { if (_cloud.Passphrase != value) { _cloud.Passphrase = value; ScheduleCloudSave(); OnPropertyChanged(); } }
+    }
+
+    public bool CloudBusy
+    {
+        get => _cloudBusy;
+        private set { if (SetProperty(ref _cloudBusy, value)) OnPropertyChanged(nameof(CloudNotBusy)); }
+    }
+
+    public bool CloudNotBusy => !_cloudBusy;
+
+    public string CloudStatus { get => _cloudStatus; private set => SetProperty(ref _cloudStatus, value); }
+
+    public string CloudLastSync
+        => CloudSync.LastSyncUtc?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "尚未同步";
+
+    // run-3 加固:http 明文连接传 Basic 凭据,给用户可见警告前缀
+    private string HttpWarning
+        => _cloud.Url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ? "⚠ 未加密连接(http):" : "";
+
+    public RelayCommand CloudTestCommand { get; }
+    public RelayCommand CloudPushCommand { get; }
+    public RelayCommand CloudRestoreCommand { get; }
+
     public SettingsViewModel()
     {
         ChangeDataDirCommand = new RelayCommand(_ => ChangeDataDir(useDefault: false));
@@ -121,6 +201,11 @@ public class SettingsViewModel : ObservableObject
         ExportMarkdownCommand = new RelayCommand(_ => Export("Markdown 文档|*.md", ".md", Exporter.ExportMarkdown));
         ExportHtmlCommand = new RelayCommand(_ => Export("网页|*.html", ".html", Exporter.ExportHtml));
         ExportPdfCommand = new RelayCommand(_ => Export("PDF 文档|*.pdf", ".pdf", Exporter.ExportPdf));
+
+        _configSaveTimer.Tick += (_, _) => FlushCloudConfig();
+        CloudTestCommand = new RelayCommand(async _ => await CloudTestAsync());
+        CloudPushCommand = new RelayCommand(async _ => await CloudPushAsync());
+        CloudRestoreCommand = new RelayCommand(async _ => await CloudRestoreAsync());
     }
 
     private void ChangeDataDir(bool useDefault)
@@ -183,10 +268,11 @@ public class SettingsViewModel : ObservableObject
             // 1) 先把内存数据落盘,保证复制的是最新状态
             App.Persist();
 
-            // 2) 复制数据库 + 偏好/岛状态随迁(审计修复:原来只迁 db,prefs/island 静默重置)
+            // 2) 复制数据库 + 偏好/岛状态/云同步状态随迁(run-3 加固:原来只迁 db/prefs/island,
+            //    webdav.json/cloud.json 留在旧目录 = 新目录视为从未同步,下次启动可能把云端旧数据拉回)
             Directory.CreateDirectory(target);
             File.Copy(Path.Combine(current, "workbench.db"), targetDb, overwrite: true);
-            foreach (var f in new[] { "prefs.json", "island.json" })
+            foreach (var f in new[] { "prefs.json", "island.json", "webdav.json", "cloud.json", "restore-pending.json", "workbench.db.cloudrestore" })
             {
                 var src = Path.Combine(current, f);
                 if (File.Exists(src)) File.Copy(src, Path.Combine(target, f), overwrite: true);
@@ -195,15 +281,10 @@ public class SettingsViewModel : ObservableObject
             // 3) 记住新位置
             AppSettings.SetDataDir(useDefault ? null : target);
 
-            // 4) 重启生效(避免各页面的视图绑定残留旧集合)
+            // 4) 重启生效(避免各页面的视图绑定残留旧集合)——run-3 加固:重启改为退出后拉起,
+            //    消除与 OnExit 收尾(含云推送最长 12s,持有单实例 Mutex)的竞速
             Dialog.Info("更改完成", "数据已复制,应用即将重启。\n\n旧目录的完整副本保留在:\n" + current + "\n(确认新位置一切正常后,可自行清理)");
-            var exe = Environment.ProcessPath
-                ?? throw new InvalidOperationException("无法确定 exe 路径");
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = exe,
-                UseShellExecute = true,
-            });
+            App.RequestRestart();
             Application.Current.Shutdown();
         }
         catch (Exception ex)
@@ -237,5 +318,84 @@ public class SettingsViewModel : ObservableObject
             App.WriteCrashLog(ex);
             Dialog.Info("导出失败", $"{ex.Message}\n\n提示:部分文件夹(如桌面)受安全软件保护,可尝试保存到其他位置。");
         }
+    }
+
+    // ===== 云同步动作 =====
+
+    // 网络层异常翻译成人话;InvalidOperationException 是 CloudSync 抛的配置类错误,原文已是人话
+    private static string TranslateCloudError(Exception ex) => ex switch
+    {
+        InvalidOperationException => ex.Message,
+        HttpRequestException h when h.Message.Contains("401") => "认证失败:账号或密码不对(坚果云请用「应用密码」)",
+        HttpRequestException h when h.Message.Contains("403") => "被服务器拒绝:检查账号权限或是否超出流量",
+        TaskCanceledException or System.TimeoutException => "连接超时:检查服务器地址与网络",
+        _ => ex.Message,
+    };
+
+    private async Task CloudTestAsync()
+    {
+        FlushCloudConfig();
+        if (CloudBusy) return;
+        CloudBusy = true;
+        CloudStatus = "正在测试连接…";
+        try
+        {
+            var msg = await CloudSync.TestAsync(_cloud);
+            CloudStatus = HttpWarning + msg;
+            Toast.Show(HttpWarning + msg, "☁️");
+        }
+        catch (Exception ex)
+        {
+            CloudStatus = "连接失败:" + TranslateCloudError(ex);
+            Toast.Show("连接失败:" + TranslateCloudError(ex), "⚠️");
+        }
+        finally { CloudBusy = false; }
+    }
+
+    private async Task CloudPushAsync()
+    {
+        FlushCloudConfig();
+        if (CloudBusy) return;
+        CloudBusy = true;
+        CloudStatus = "正在上传…";
+        try
+        {
+            await CloudSync.PushAsync(_cloud);
+            CloudStatus = "已上传到云端";
+            OnPropertyChanged(nameof(CloudLastSync));
+            Toast.Show(HttpWarning + "已上传到云端 ☁️", "☁️");
+        }
+        catch (Exception ex)
+        {
+            CloudStatus = "上传失败:" + TranslateCloudError(ex);
+            Toast.Show("上传失败:" + TranslateCloudError(ex), "⚠️");
+        }
+        finally { CloudBusy = false; }
+    }
+
+    private async Task CloudRestoreAsync()
+    {
+        FlushCloudConfig();
+        if (CloudBusy) return;
+        if (!Dialog.Confirm("从云端恢复",
+                (HttpWarning.Length > 0 ? HttpWarning + "\n\n" : "") +
+                "将用云端数据覆盖本地数据库(便签/任务/待办以云端为准)。\n\n当前本地数据会先备份到云端 workbench.db.bak,恢复错了还能找回。\n恢复在重启应用后生效。继续?"))
+            return;
+        CloudBusy = true;
+        CloudStatus = "正在从云端拉取…";
+        try
+        {
+            await CloudSync.RestoreNowAsync(_cloud);
+            // 顺利:重启生效——但不在旧实例里直接 Process.Start(run-3 加固:旧实例退出推送最长占
+            // Mutex 12s,立即拉起新实例会撞"已在运行中"而退出)。改为请求重启,OnExit 释放 Mutex 后再拉起
+            App.RequestRestart();
+            Application.Current.Shutdown();
+        }
+        catch (Exception ex)
+        {
+            CloudStatus = "恢复失败:" + TranslateCloudError(ex);
+            Toast.Show("恢复失败:" + TranslateCloudError(ex), "⚠️");
+        }
+        finally { CloudBusy = false; }
     }
 }

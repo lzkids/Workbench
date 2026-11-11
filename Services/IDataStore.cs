@@ -9,4 +9,7 @@ public interface IDataStore
 
     // 返回 true = 已成功落盘(调用方可据此决定后续动作,如迁移改名);失败仅记日志不上抛
     bool Save(WorkbenchData data);
+
+    // 云同步快照:当前数据的一致性快照(SQLite 在线备份/整文件读出),供推送到云端
+    byte[] SnapshotToBytes();
 }

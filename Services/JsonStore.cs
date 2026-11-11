@@ -27,6 +27,9 @@ public class JsonStore : IDataStore
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
+    // 云同步快照:参考实现直接读当前数据文件(Save 已是"临时文件+原子替换",文件恒一致)
+    public byte[] SnapshotToBytes() => File.Exists(FilePath) ? File.ReadAllBytes(FilePath) : [];
+
     public WorkbenchData Load()
     {
         // 一次性迁移:旧 AppData 数据搬到新位置(只复制不删除)

@@ -33,6 +33,26 @@ public class SqliteStore : IDataStore
     private string ConnString =>
         new SqliteConnectionStringBuilder { DataSource = _dbPath }.ToString();
 
+    // 云同步快照:SQLite 在线备份 API(BackupDatabase)拷出一致性快照到临时文件再读字节——
+    // 绕开"直接复制可能写了一半的库文件"的不一致;临时文件即建即删
+    public byte[] SnapshotToBytes()
+    {
+        var tmp = Path.Combine(_dir, $"workbench.snapshot_{Guid.NewGuid():N}.tmp");
+        try
+        {
+            using var src = Open();
+            using var dst = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = tmp }.ToString());
+            dst.Open();
+            src.BackupDatabase(dst);
+            dst.Close();
+            return File.ReadAllBytes(tmp);
+        }
+        finally
+        {
+            try { if (File.Exists(tmp)) File.Delete(tmp); } catch { /* 快照残留不致命 */ }
+        }
+    }
+
     public WorkbenchData Load()
     {
         MigrateLegacyJson();

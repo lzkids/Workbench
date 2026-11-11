@@ -51,6 +51,22 @@ public partial class App : Application
             Persist();
         };
 
+        // 云同步:先消费"待恢复"(设置页手动恢复后重启)与启动自动拉取——都必须赶在开库之前;
+        // 网络不可达时限 8s 放弃,不为同步卡启动
+        string? cloudNote = null;
+        try
+        {
+            CloudSync.ConsumePendingRestore();
+            var pull = CloudSync.PullAtStartupAsync(CloudSync.LoadConfig())
+                .WaitAsync(TimeSpan.FromSeconds(8)).GetAwaiter().GetResult();
+            cloudNote = pull.Note;
+            Trace("cloud startup pull: " + pull.Outcome + (pull.Note is null ? "" : " | " + pull.Note));
+        }
+        catch (Exception ex)
+        {
+            Trace("cloud startup sync skipped: " + ex.Message);
+        }
+
         Data = Store.Load();
         Trace("data loaded");
         base.OnStartup(e);
@@ -135,10 +151,24 @@ public partial class App : Application
             Trace("memtest branch reached");
             RunMemoryLeakTest(islandController);
         }
+
+        // 测试钩子:WebDAV 客户端回环自测(本机伪装服务端,不出网),结果写 trace + toast
+        if (e.Args.Contains("davtest"))
+        {
+            Trace("davtest branch reached");
+            RunDavTest();
+        }
+
+        if (cloudNote is not null)
+            Toast.Show(cloudNote, "☁️");
     }
 
     private static Mutex? _singleInstance;
     private static bool _saveFailureNotified;
+    private static bool _restartAfterExit;
+
+    // 恢复/改数据目录等场景:请求在 OnExit 释放单实例 Mutex 之后再拉起新实例(run-3 加固)
+    public static void RequestRestart() => _restartAfterExit = true;
 
     // 保存失败一次性可见告警(审计修复):写库异常原被静默吞掉,防抖窗口内的更改丢失无任何信号
     public static void NotifySaveFailure(Exception ex)
@@ -153,6 +183,206 @@ public partial class App : Application
                 System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
         }
         catch { /* 通知本身失败不再放大问题 */ }
+    }
+
+    // ===== WebDAV 客户端回环自测(davtest):本机 TcpListener 伪装最小 WebDAV 服务,
+    // 验证 PUT/GET/PROPFIND/MKCOL + Basic 认证 + 401 拒绝 + PROPFIND 解析,全程不出网 =====
+    private static async void RunDavTest()
+    {
+        Trace("davtest: begin");
+
+        // 内容加密往返(纯本地内存,不依赖回环网络;本机防护拦回环也不影响这组断言)
+        try
+        {
+            var plain = System.Text.Encoding.UTF8.GetBytes("工作台云同步加密往返测试 payload-123");
+            var enc = CloudSync.EncryptSnapshot(plain, "secret1");
+            if (!enc.AsSpan(0, 4).SequenceEqual("WBE1"u8)) throw new Exception("加密容器缺 WBE1 魔数");
+            var dec = CloudSync.DecryptSnapshot(enc, "secret1");
+            if (!dec.AsSpan().SequenceEqual(plain)) throw new Exception("解密内容与原文不一致");
+            var wrongRejected = false;
+            try { CloudSync.DecryptSnapshot(enc, "wrong"); }
+            catch (InvalidOperationException) { wrongRejected = true; }
+            if (!wrongRejected) throw new Exception("错误加密密码未被拒绝");
+
+            // 同步决策回归(run-3 审计修复):令牌与比较值同处服务器时钟域,服务器钟慢/快都不再误判。
+            // 放在本地断言区:回环网络在本机被防护拦截,网络相关断言不可达,这两组是本机唯一可验证的回归
+            var localNow = DateTimeOffset.UtcNow;
+            if (CloudSync.DecidePull(localNow.AddHours(-1).AddMinutes(5), localNow.AddHours(-1), localNow, null)
+                != CloudSync.StartupPullOutcome.Pulled)
+                throw new Exception("服务器钟慢 1h 且远端确实前进 5min 时,应判定拉取(旧实现会被本地时钟误判跳过)");
+            if (CloudSync.DecidePull(localNow, localNow, localNow, null) != CloudSync.StartupPullOutcome.None)
+                throw new Exception("远端令牌未变时应跳过拉取");
+            if (CloudSync.DecidePull(localNow.AddMinutes(5), localNow, localNow.AddMinutes(-10), localNow.AddMinutes(-1))
+                != CloudSync.StartupPullOutcome.Conflict)
+                throw new Exception("远端前进且本地也有改动时应判 Conflict 保守不覆盖");
+            if (CloudSync.DecidePull(localNow.AddMinutes(5), localNow, localNow.AddMinutes(-10), null)
+                != CloudSync.StartupPullOutcome.Pulled)
+                throw new Exception("远端前进且本地无改动时应自动拉取");
+            if (CloudSync.DecidePull(null, null, localNow, null) != CloudSync.StartupPullOutcome.NoRemote)
+                throw new Exception("远端无文件应判 NoRemote");
+
+            Trace("davtest local asserts PASS (crypto + sync-decision)");
+        }
+        catch (Exception ex)
+        {
+            Trace("davtest crypto FAIL: " + ex.Message);
+            Toast.Show("云同步加密自测失败:" + ex.Message, "⚠️");
+            return; // 加密层坏了就不必再测网络
+        }
+
+        var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        try
+        {
+            listener.Start();
+            var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+            var store = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+            var dirs = new HashSet<string>(StringComparer.Ordinal) { "/dav/" };
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    while (true)
+                    {
+                        using var client = await listener.AcceptTcpClientAsync();
+                        using var stream = client.GetStream();
+                        var head = await ReadUntilAsync(stream, "\r\n\r\n");
+                        if (head is null) return;
+                        var lines = head.Split("\r\n");
+                        var parts = lines[0].Split(' ');
+                        if (parts.Length < 2) { WriteHttpResponse(stream, "400 Bad Request", null); return; }
+                        var verb = parts[0];
+                        var path = parts[1];
+                        var contentLength = 0;
+                        string? auth = null;
+                        foreach (var line in lines.Skip(1))
+                        {
+                            var kv = line.Split(':', 2);
+                            if (kv.Length != 2) continue;
+                            if (kv[0].Trim().Equals("Content-Length", StringComparison.OrdinalIgnoreCase))
+                                contentLength = int.Parse(kv[1].Trim());
+                            if (kv[0].Trim().Equals("Authorization", StringComparison.OrdinalIgnoreCase))
+                                auth = kv[1].Trim();
+                        }
+                        var body = await ReadExactlyAsync(stream, contentLength);
+
+                        var expect = "Basic " + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("user01:pw01"));
+                        if (auth != expect) { WriteHttpResponse(stream, "401 Unauthorized", null); continue; }
+
+                        switch (verb)
+                        {
+                            case "MKCOL":
+                                dirs.Add(path.TrimEnd('/') + "/");
+                                WriteHttpResponse(stream, "201 Created", null);
+                                break;
+                            case "PUT":
+                                store[path] = body;
+                                WriteHttpResponse(stream, "201 Created", null);
+                                break;
+                            case "GET" when store.TryGetValue(path, out var data):
+                                WriteHttpResponse(stream, "200 OK", data, "application/octet-stream");
+                                break;
+                            case "GET":
+                                WriteHttpResponse(stream, "404 Not Found", null);
+                                break;
+                            case "PROPFIND":
+                                var exists = dirs.Contains(path.TrimEnd('/') + "/") || store.ContainsKey(path);
+                                if (!exists) { WriteHttpResponse(stream, "404 Not Found", null); break; }
+                                var xml = "<D:multistatus><D:response><D:propstat><D:prop><D:getlastmodified>"
+                                          + DateTime.UtcNow.ToString("R")
+                                          + "</D:getlastmodified></D:prop></D:propstat></D:response></D:multistatus>";
+                                WriteHttpResponse(stream, "207 Multi-Status", System.Text.Encoding.UTF8.GetBytes(xml), "application/xml");
+                                break;
+                            default:
+                                WriteHttpResponse(stream, "405 Method Not Allowed", null);
+                                break;
+                        }
+                    }
+                }
+                catch { /* listener.Stop() 后 Accept 抛异常 → 服务循环退出 */ }
+            });
+
+            var root = $"http://127.0.0.1:{port}/dav";
+            var dbUrl = root + "/Workbench/workbench.db";
+            // 真 SQLite 魔数开头 + 若干字节,顺带验证 PUT/GET 字节级一致
+            var payload = new byte[] { 0x53, 0x51, 0x4C, 0x69, 0x74, 0x65, 0x66, 0x6F, 0x72, 0x6D, 0x61, 0x74, 0x20, 0x33, 0x00, 0x01, 0x02, 0x03 };
+
+            var ok = new WebDavClient("user01", "pw01", null, TimeSpan.FromSeconds(4));
+            if (await ok.StatAsync(dbUrl) is not null) throw new Exception("远端不存在时应返回 null");
+            await ok.MkcolAsync(root + "/Workbench");
+            await ok.PutAsync(dbUrl, payload);
+            var st = await ok.StatAsync(dbUrl) ?? throw new Exception("PUT 后 PROPFIND 应命中");
+            if (st.LastModified is null) throw new Exception("PROPFIND 未解析出 Last-Modified");
+            var got = await ok.GetAsync(dbUrl) ?? throw new Exception("GET 返回 null");
+            if (!got.AsSpan().SequenceEqual(payload)) throw new Exception("GET 内容与 PUT 不一致");
+
+            var bad = new WebDavClient("user01", "wrong", null, TimeSpan.FromSeconds(4)); // 错误凭据应被 401 拒绝
+            var rejected = false;
+            try { await bad.StatAsync(dbUrl); }
+            catch (System.Net.Http.HttpRequestException) { rejected = true; }
+            if (!rejected) throw new Exception("错误凭据未被 401 拒绝");
+
+            if (WebDavClient.ParseStat("<d:multistatus><d:getlastmodified>Wed, 11 Nov 2026 00:00:00 GMT</d:getlastmodified></d:multistatus>")?.LastModified is null)
+                throw new Exception("ParseStat 未兼容 d: 命名空间前缀");
+
+            listener.Stop();
+            Trace("davtest PASS (loopback section)");
+            Trace("davtest PASS");
+            Toast.Show("WebDAV 客户端自测通过(回环)", "☁️");
+        }
+        catch (Exception ex)
+        {
+            Trace("davtest FAIL: " + ex.Message);
+            // 实测(2026-11-12):本机防护在 WFP 层静默丢弃发往未签名进程监听端口的入站流量
+            // (对照:关死端口立即拒绝、本端口静默超时),回环自测在这台机器上天然不可用;
+            // 真实云端同步是纯出站连接,不受此限——引导用户用真实账号走「测试连接」验证
+            var hint = ex is TaskCanceledException
+                ? "回环监听被本机防护拦截(端口流量被静默丢弃),本机回环自测不可用;真实云端同步请填好账号后点「测试连接」验证"
+                : ex.Message;
+            Toast.Show("WebDAV 自测失败:" + hint, "⚠️");
+        }
+        finally
+        {
+            try { listener.Stop(); } catch { }
+        }
+    }
+
+    private static async Task<string?> ReadUntilAsync(System.Net.Sockets.NetworkStream s, string marker)
+    {
+        var buf = new List<byte>();
+        var mark = System.Text.Encoding.ASCII.GetBytes(marker);
+        var chunk = new byte[1024];
+        while (buf.Count < 64 * 1024)
+        {
+            var n = await s.ReadAsync(chunk);
+            if (n == 0) return null;
+            buf.AddRange(chunk.Take(n));
+            if (buf.Count >= mark.Length && buf.TakeLast(mark.Length).SequenceEqual(mark))
+                return System.Text.Encoding.ASCII.GetString(buf.Take(buf.Count - mark.Length).ToArray());
+        }
+        return null;
+    }
+
+    private static async Task<byte[]> ReadExactlyAsync(System.Net.Sockets.NetworkStream s, int count)
+    {
+        var data = new byte[count];
+        var read = 0;
+        while (read < count)
+        {
+            var n = await s.ReadAsync(data.AsMemory(read, count - read));
+            if (n == 0) break;
+            read += n;
+        }
+        return data;
+    }
+
+    private static void WriteHttpResponse(System.Net.Sockets.NetworkStream s, string status, byte[]? body, string contentType = "text/plain")
+    {
+        body ??= [];
+        var head = $"HTTP/1.1 {status}\r\nContent-Type: {contentType}\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n";
+        s.Write(System.Text.Encoding.ASCII.GetBytes(head));
+        if (body.Length > 0) s.Write(body);
+        s.Flush();
     }
 
     // ===== 内存泄漏自测:岛开合×50 + 弹窗开合×20,断言托管堆回基线、窗口数不变 =====
@@ -424,7 +654,24 @@ public partial class App : Application
     {
         SaveTimer.Stop();
         Persist(); // 退出前把防抖窗口里的最后改动落盘
+        try { CloudSync.PushOnExit(CloudSync.LoadConfig()); } // 退出自动上传(内部限时 12s,失败只记日志不拦退出)
+        catch (Exception ex) { Trace("cloud push on exit failed: " + ex.Message); }
         _singleInstance?.Dispose(); // 释放单实例守卫,允许下一次启动
+        // run-3 加固:恢复/改数据目录请求的重启延迟到此——Mutex 已释放,新实例不会撞"已在运行中"
+        if (_restartAfterExit)
+        {
+            try
+            {
+                var exe = Environment.ProcessPath
+                    ?? throw new InvalidOperationException("无法确定 exe 路径");
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = exe,
+                    UseShellExecute = true,
+                });
+            }
+            catch (Exception ex) { Trace("restart after exit failed: " + ex.Message); }
+        }
         base.OnExit(e);
     }
 
