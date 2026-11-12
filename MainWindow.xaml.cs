@@ -224,8 +224,8 @@ public partial class MainWindow : FluentWindow
     // 回收站/设置不属于上部列表,此时清空其选中,由底部按钮样式自行高亮
     private void TopNav_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
-        if (e.AddedItems.Count > 0)
-            Vm.Selected = (NavigationItem)e.AddedItems[0];
+        if (e.AddedItems.Count > 0 && e.AddedItems[0] is NavigationItem item)
+            Vm.Selected = item;
     }
 
     private void SyncTopNavHighlight()
@@ -236,6 +236,16 @@ public partial class MainWindow : FluentWindow
     // 底部导航图标:回收站/设置 → 选中对应 NavItem,内容区随 DataTemplate 切页
     private void BottomNav_Click(object sender, RoutedEventArgs e)
         => Vm.Selected = Vm.BottomNavItems[sender == RecycleBtn ? 0 : 1];
+
+    // 底部 ☁️:跳到设置页并滚动定位云同步卡片(已在设置页则直接定位);跨页时给 SettingsPage 一次性令牌
+    private void CloudSyncSettings_Click(object sender, RoutedEventArgs e)
+    {
+        var settingsItem = Vm.BottomNavItems[1];
+        bool already = Vm.Selected == settingsItem;
+        Vm.Selected = settingsItem;
+        if (already) Views.SettingsPage.Current?.RevealCloudSection();
+        else App.PendingCloudSectionJump = true;
+    }
 
     // 深浅色切换:防御式——失败弹提示、真正回滚,绝不闪退也不留"半应用"状态
     public void ToggleTheme()

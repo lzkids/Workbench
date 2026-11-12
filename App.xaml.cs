@@ -167,6 +167,9 @@ public partial class App : Application
     private static bool _saveFailureNotified;
     private static bool _restartAfterExit;
 
+    // 岛底 ☁️ 按钮的一次性跳转令牌:MainWindow 置位后切到设置页,SettingsPage.Loaded 时消费
+    public static bool PendingCloudSectionJump;
+
     // 恢复/改数据目录等场景:请求在 OnExit 释放单实例 Mutex 之后再拉起新实例(run-3 加固)
     public static void RequestRestart() => _restartAfterExit = true;
 

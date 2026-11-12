@@ -38,10 +38,24 @@
 
     <DockPanel>
         <Border DockPanel.Dock="Top" Padding="0,0,0,12">
-            <ui:Button Command="{Binding NewCommand}"
-                       Content="＋ 新建便签(独立置顶小窗)"
-                       Appearance="Primary"
-                       HorizontalAlignment="Right"/>
+            <DockPanel LastChildFill="False">
+                <!-- 云同步快捷入口:不用去设置页,上传/拉取一键直达 -->
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                    <ui:Button Command="{Binding Cloud.CloudPushCommand}"
+                               Content="☁️ 上传"
+                               IsEnabled="{Binding Cloud.CloudIdle}"
+                               ToolTip="把本地数据上传到云端备份(便签/任务/待办一起)"/>
+                    <ui:Button Command="{Binding Cloud.CloudSyncCommand}"
+                               Content="⬇ 同步"
+                               IsEnabled="{Binding Cloud.CloudIdle}"
+                               Margin="8,0,0,0"
+                               ToolTip="用云端数据覆盖本地(重启应用后生效;本地现状会先备份到云端 .bak)"/>
+                </StackPanel>
+                <ui:Button Command="{Binding NewCommand}"
+                           Content="＋ 新建便签(独立置顶小窗)"
+                           Appearance="Primary"
+                           DockPanel.Dock="Right"/>
+            </DockPanel>
         </Border>
 
         <Grid>

@@ -11,6 +11,9 @@ public class NotesViewModel : ObservableObject
 
     private ICollectionView? _view;
 
+    // 云同步快捷按钮:逻辑在 CloudSyncBar(与归档/回收站页共用)
+    public CloudSyncBar Cloud { get; } = new();
+
     public RelayCommand NewCommand { get; }
     public RelayCommand DeleteCommand { get; }
     public RelayCommand ArchiveCommand { get; }

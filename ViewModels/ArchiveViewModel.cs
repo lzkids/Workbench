@@ -10,6 +10,9 @@ public class ArchiveViewModel : ObservableObject
 {
     public ObservableCollection<ArchiveGroup> Groups { get; } = new();
 
+    // 云同步快捷按钮:逻辑在 CloudSyncBar(与便签/回收站页共用)
+    public CloudSyncBar Cloud { get; } = new();
+
     public RelayCommand RestoreCommand { get; }
     public RelayCommand RecycleCommand { get; }
 

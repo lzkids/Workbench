@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -43,6 +44,18 @@ public static class CloudSync
     private static bool _inFlight;
     private static bool TryBegin() { if (_inFlight) return false; _inFlight = true; return true; }
     private static void End() => _inFlight = false;
+
+    // ===== 异常翻译:网络层异常→人话;InvalidOperationException 是配置类错误,原文已是人话 =====
+    // 供设置页和便签页快捷按钮共用(便签页只有 Toast,没有状态栏可展示,更依赖人话)
+
+    public static string TranslateError(Exception ex) => ex switch
+    {
+        InvalidOperationException => ex.Message,
+        HttpRequestException h when h.Message.Contains("401") => "认证失败:账号或密码不对(坚果云请用「应用密码」)",
+        HttpRequestException h when h.Message.Contains("403") => "被服务器拒绝:检查账号权限或是否超出流量",
+        TaskCanceledException or System.TimeoutException => "连接超时:检查服务器地址与网络",
+        _ => ex.Message,
+    };
 
     // ===== 配置 =====
 

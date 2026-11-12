@@ -5,8 +5,23 @@
 
     <DockPanel>
         <Border DockPanel.Dock="Top" Padding="0,0,0,12">
-            <TextBlock Text="归档的内容按类型和时间分组,点分组标题折叠/展开;恢复后回到原页面" FontSize="12"
-                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+            <DockPanel LastChildFill="True">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <!-- 云同步快捷按钮:与便签/回收站页同一套(CloudSyncBar) -->
+                    <ui:Button Command="{Binding Cloud.CloudPushCommand}"
+                               Content="☁️ 上传"
+                               IsEnabled="{Binding Cloud.CloudIdle}"
+                               ToolTip="把本地数据上传到云端备份(便签/任务/待办一起)"/>
+                    <ui:Button Command="{Binding Cloud.CloudSyncCommand}"
+                               Content="⬇ 同步"
+                               IsEnabled="{Binding Cloud.CloudIdle}"
+                               Margin="8,0,0,0"
+                               ToolTip="用云端数据覆盖本地(重启应用后生效;本地现状会先备份到云端 .bak)"/>
+                </StackPanel>
+                <TextBlock Text="归档的内容按类型和时间分组,点分组标题折叠/展开;恢复后回到原页面" FontSize="12"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+            </DockPanel>
         </Border>
 
         <Grid>

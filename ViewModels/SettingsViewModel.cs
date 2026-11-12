@@ -321,16 +321,7 @@ public class SettingsViewModel : ObservableObject
     }
 
     // ===== 云同步动作 =====
-
-    // 网络层异常翻译成人话;InvalidOperationException 是 CloudSync 抛的配置类错误,原文已是人话
-    private static string TranslateCloudError(Exception ex) => ex switch
-    {
-        InvalidOperationException => ex.Message,
-        HttpRequestException h when h.Message.Contains("401") => "认证失败:账号或密码不对(坚果云请用「应用密码」)",
-        HttpRequestException h when h.Message.Contains("403") => "被服务器拒绝:检查账号权限或是否超出流量",
-        TaskCanceledException or System.TimeoutException => "连接超时:检查服务器地址与网络",
-        _ => ex.Message,
-    };
+    // 异常翻译已挪到 CloudSync.TranslateError(便签页快捷按钮与这里共用同一套人话)
 
     private async Task CloudTestAsync()
     {
@@ -346,8 +337,8 @@ public class SettingsViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            CloudStatus = "连接失败:" + TranslateCloudError(ex);
-            Toast.Show("连接失败:" + TranslateCloudError(ex), "⚠️");
+            CloudStatus = "连接失败:" + CloudSync.TranslateError(ex);
+            Toast.Show("连接失败:" + CloudSync.TranslateError(ex), "⚠️");
         }
         finally { CloudBusy = false; }
     }
@@ -367,8 +358,8 @@ public class SettingsViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            CloudStatus = "上传失败:" + TranslateCloudError(ex);
-            Toast.Show("上传失败:" + TranslateCloudError(ex), "⚠️");
+            CloudStatus = "上传失败:" + CloudSync.TranslateError(ex);
+            Toast.Show("上传失败:" + CloudSync.TranslateError(ex), "⚠️");
         }
         finally { CloudBusy = false; }
     }
@@ -393,8 +384,8 @@ public class SettingsViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            CloudStatus = "恢复失败:" + TranslateCloudError(ex);
-            Toast.Show("恢复失败:" + TranslateCloudError(ex), "⚠️");
+            CloudStatus = "恢复失败:" + CloudSync.TranslateError(ex);
+            Toast.Show("恢复失败:" + CloudSync.TranslateError(ex), "⚠️");
         }
         finally { CloudBusy = false; }
     }

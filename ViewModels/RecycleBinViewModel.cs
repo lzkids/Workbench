@@ -7,6 +7,9 @@ public class RecycleBinViewModel : ObservableObject
 {
     public ObservableCollection<RecycleItem> Items => App.Data.RecycleBin;
 
+    // 云同步快捷按钮:逻辑在 CloudSyncBar(与便签/归档页共用)
+    public CloudSyncBar Cloud { get; } = new();
+
     public RelayCommand RestoreCommand { get; }
     public RelayCommand DeleteForeverCommand { get; }
     public RelayCommand ClearCommand { get; }

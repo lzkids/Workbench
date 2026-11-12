@@ -142,7 +142,9 @@
                 </StackPanel>
             </ui:Card>
 
-            <!-- 云同步 (WebDAV) -->
+            <!-- 云同步 (WebDAV):命名容器供岛底 ☁️ 按钮滚动定位 + 短暂高亮 -->
+            <Border x:Name="CloudSection" BorderThickness="1" BorderBrush="Transparent" CornerRadius="6">
+            <StackPanel>
             <TextBlock Text="云同步 (WebDAV)" FontSize="15" FontWeight="Bold" Margin="0,0,0,10"
                        Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
             <ui:Card Padding="14,12" Margin="0,0,0,20">
@@ -217,6 +219,8 @@
                                Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
                 </StackPanel>
             </ui:Card>
+            </StackPanel>
+            </Border>
 
             <!-- 关于 -->
             <TextBlock Text="关于" FontSize="15" FontWeight="Bold" Margin="0,0,0,10"

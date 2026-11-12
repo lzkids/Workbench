@@ -232,6 +232,11 @@
                             <ui:SymbolIcon x:Name="ThemeSymbol" Symbol="WeatherMoon24" FontSize="17"
                                            Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
                         </Button>
+                        <Button x:Name="CloudSyncBtn" Style="{StaticResource IconNavButtonStyle}"
+                                Click="CloudSyncSettings_Click" ToolTip="云同步设置" Margin="3">
+                            <ui:SymbolIcon Symbol="Cloud24" FontSize="17"
+                                           Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+                        </Button>
                         <Button x:Name="RecycleBtn" Style="{StaticResource RecycleBtnStyle}"
                                 Click="BottomNav_Click" ToolTip="回收站" Margin="3">
                             <ui:SymbolIcon Symbol="Delete24" FontSize="17"
