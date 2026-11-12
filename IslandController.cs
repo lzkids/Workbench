@@ -232,7 +232,7 @@ public class IslandController
             case "todos":
             {
                 var win = new QuickTodoWindow { Owner = _island, Topmost = true };
-                if (win.ShowDialog() == true)
+                if (win.ShowDialog() == true && win.Result is not null)
                 {
                     App.Data.Todos.Insert(0, win.Result);
                     App.Persist();
