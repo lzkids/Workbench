@@ -201,6 +201,7 @@ public class IslandController
         ("notes", "📝", "便签"),
         ("tasks", "🗂️", "任务记录"),
         ("todos", "✅", "待办"),
+        ("md", "📄", "MD 文档"),
     };
 
     // 点岛上的入口 → 快速记录窗(不再弹整页):
@@ -237,6 +238,16 @@ public class IslandController
                     App.Data.Todos.Insert(0, win.Result);
                     App.Persist();
                 }
+                break;
+            }
+            case "md":
+            {
+                // MD 文档 = 直接开新文档编辑窗(与便签小窗同一套 WebView2 渲染管线)
+                var doc = new MdDoc();
+                App.Data.MdDocs.Insert(0, doc);
+                App.Persist();
+                var win = new MdDocWindow(doc) { Owner = _island, Topmost = true };
+                win.Show();
                 break;
             }
         }

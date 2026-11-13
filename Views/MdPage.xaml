@@ -1,0 +1,71 @@
+<UserControl x:Class="Workbench.Views.MdPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
+
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Padding="0,0,0,12">
+            <DockPanel LastChildFill="False">
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                    <ui:Button Command="{Binding Cloud.CloudPushCommand}"
+                               Content="☁️ 上传"
+                               IsEnabled="{Binding Cloud.CloudIdle}"
+                               ToolTip="把本地数据上传到云端备份(便签/任务/待办/MD 文档一起)"/>
+                    <ui:Button Command="{Binding Cloud.CloudSyncCommand}"
+                               Content="⬇ 同步"
+                               IsEnabled="{Binding Cloud.CloudIdle}"
+                               Margin="8,0,0,0"
+                               ToolTip="用云端数据覆盖本地(重启应用后生效;本地现状会先备份到云端 .bak)"/>
+                </StackPanel>
+                <ui:Button Command="{Binding NewCommand}"
+                           Content="＋ 新建文档"
+                           Appearance="Primary"
+                           DockPanel.Dock="Right"
+                           ToolTip="新建一篇 Markdown 文档,弹出独立编辑窗"/>
+            </DockPanel>
+        </Border>
+
+        <Grid>
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding Items}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <ui:Card Padding="12,9" Margin="0,0,0,10" MouseLeftButtonDown="OpenDoc_Click" Cursor="Hand">
+                                <DockPanel>
+                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <ui:Button DockPanel.Dock="Right" Content="✕" Width="28" Height="28"
+                                                   Appearance="Secondary" Padding="2,0" ToolTip="删除(进回收站)"
+                                                   Command="{Binding DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                   CommandParameter="{Binding}"/>
+                                    </StackPanel>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="DemiBold"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+                                        <TextBlock Text="{Binding CreatedAt, StringFormat={}{0:yyyy-MM-dd HH:mm}}" FontSize="11"
+                                                   Margin="0,2,0,0"
+                                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                                    </StackPanel>
+                                </DockPanel>
+                            </ui:Card>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+            <TextBlock Text="📄 还没有 MD 文档,点上方「新建文档」开始" FontSize="13"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-60,0,0">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Items.Count}" Value="0">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+        </Grid>
+    </DockPanel>
+</UserControl>

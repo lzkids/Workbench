@@ -1,0 +1,29 @@
+<ui:FluentWindow x:Class="Workbench.MdDocWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="MD 文档" Width="760" Height="560" MinWidth="420" MinHeight="320"
+        WindowStartupLocation="CenterScreen"
+        ExtendsContentIntoTitleBar="True"
+        Closed="Window_Closed">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <ui:TitleBar x:Name="TitleBar" Title="MD 文档"/>
+        <Grid Grid.Row="1" Margin="10,0,10,10">
+            <!-- 编辑器从一开始就可见:WebView2 hwnd 必须以真实尺寸创建(Collapsed/Hidden 下 0 尺寸初始化会视口错配);
+                 FallbackBox 铺同格被 hwnd 盖住,失败/看门狗时撤 Editor 翻出回退框 -->
+            <wv2:WebView2 x:Name="Editor"/>
+            <TextBox x:Name="FallbackBox" Text="{Binding Content, UpdateSourceTrigger=PropertyChanged}"
+                     AcceptsReturn="True" TextWrapping="Wrap"
+                     Background="Transparent" BorderThickness="0"
+                     FontSize="14"
+                     Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                     Visibility="Collapsed"
+                     VerticalScrollBarVisibility="Auto"/>
+        </Grid>
+    </Grid>
+</ui:FluentWindow>

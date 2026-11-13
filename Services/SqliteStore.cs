@@ -90,6 +90,29 @@ public class SqliteStore : IDataStore
 
         using (var cmd = conn.CreateCommand())
         {
+            cmd.CommandText = "SELECT id, title, content, created_at, archived, archived_at FROM md";
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+                try
+                {
+                    data.MdDocs.Add(new MdDoc
+                    {
+                        Id = r.IsDBNull(0) ? Guid.NewGuid().ToString() : r.GetString(0),
+                        Title = r.IsDBNull(1) ? "" : r.GetString(1),
+                        Content = r.IsDBNull(2) ? "" : r.GetString(2),
+                        CreatedAt = GetDate(r, 3),
+                        Archived = !r.IsDBNull(4) && r.GetInt64(4) != 0,
+                        ArchivedAt = r.IsDBNull(5) ? null : GetDate(r, 5),
+                    });
+                }
+                catch (Exception ex)
+                {
+                    App.WriteCrashLog(new Exception($"md 表存在损坏行,已跳过: {ex.Message}"));
+                }
+        }
+
+        using (var cmd = conn.CreateCommand())
+        {
             cmd.CommandText = "SELECT id, title, content, status, created_at, updated_at, archived, archived_at, subtasks, tag FROM tasks";
             using var r = cmd.ExecuteReader();
             while (r.Read())
@@ -263,6 +286,16 @@ public class SqliteStore : IDataStore
                     ("$archived_at", t.ArchivedAt.HasValue ? Fmt(t.ArchivedAt.Value) : null),
                     ("$completed", t.CompletedAt.HasValue ? Fmt(t.CompletedAt.Value) : null));
 
+            Exec(conn, tx, "DELETE FROM md");
+            foreach (var m in d.MdDocs)
+                Exec(conn, tx,
+                    "INSERT OR REPLACE INTO md(id, title, content, created_at, archived, archived_at) " +
+                    "VALUES($id, $title, $content, $created, $archived, $archived_at)",
+                    ("$id", m.Id), ("$title", m.Title), ("$content", m.Content),
+                    ("$created", Fmt(m.CreatedAt)),
+                    ("$archived", m.Archived ? 1L : 0L),
+                    ("$archived_at", m.ArchivedAt.HasValue ? Fmt(m.ArchivedAt.Value) : null));
+
             Exec(conn, tx, "DELETE FROM recycle");
             foreach (var r in d.RecycleBin)
                 Exec(conn, tx,
@@ -313,6 +346,9 @@ public class SqliteStore : IDataStore
                 due_date TEXT, created_at TEXT);
             CREATE TABLE IF NOT EXISTS recycle(
                 id TEXT PRIMARY KEY, kind TEXT, title TEXT, payload TEXT, deleted_at TEXT);
+            CREATE TABLE IF NOT EXISTS md(
+                id TEXT PRIMARY KEY, title TEXT, content TEXT, created_at TEXT,
+                archived INTEGER, archived_at TEXT);
             CREATE TABLE IF NOT EXISTS meta(
                 key TEXT PRIMARY KEY, value TEXT);
             """);

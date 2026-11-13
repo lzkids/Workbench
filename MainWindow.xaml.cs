@@ -261,6 +261,11 @@ public partial class MainWindow : FluentWindow
             App.Persist();
             App.Trace("toggle: persist ok");
             UpdateThemeButton();
+            // 推给已打开的 md 编辑器小窗(Vditor 重建换肤,内容保留;MD 文档窗连配色一起换)
+            foreach (var w in Application.Current.Windows.OfType<StickyWindow>())
+                w.OnAppThemeChanged();
+            foreach (var w in Application.Current.Windows.OfType<MdDocWindow>())
+                w.OnAppThemeChanged();
         }
         catch (Exception ex)
         {

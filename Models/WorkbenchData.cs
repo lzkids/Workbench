@@ -9,6 +9,7 @@ public class WorkbenchData
     public ObservableCollection<NoteItem> Notes { get; set; } = new();
     public ObservableCollection<TaskItem> Tasks { get; set; } = new();
     public ObservableCollection<TodoItem> Todos { get; set; } = new();
+    public ObservableCollection<MdDoc> MdDocs { get; set; } = new();
     public ObservableCollection<RecycleItem> RecycleBin { get; set; } = new();
     // 主题偏好:Light / Dark
     public string Theme { get; set; } = "Light";

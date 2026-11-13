@@ -18,6 +18,9 @@ public partial class App : Application
     public static string DataDir { get; } =
         AppSettings.GetDataDir() ?? Path.Combine(AppContext.BaseDirectory, "Data");
     public static IDataStore Store { get; } = new SqliteStore(DataDir);
+
+    // md 编辑器离线资产根(Vditor 精简 dist + editor.html),经 WebView2 虚拟域名 https://md.local 提供
+    public static string MdEditorDir { get; } = Path.Combine(AppContext.BaseDirectory, "MdEditor");
     public static WorkbenchData Data { get; private set; } = new();
 
     // 自动保存防抖:任何改动后 1 秒无新动作才落盘
@@ -80,7 +83,7 @@ public partial class App : Application
         HookAutoSave(Data);
         Trace("autosave hooked");
 
-        // 可选启动参数:0-5 选初始页;"toggle" 自动切主题;"selftest" 跑功能自测(自动化验证用)
+        // 可选启动参数:0-6 选初始页;"toggle" 自动切主题;"selftest" 跑功能自测(自动化验证用)
         int page = 0;
         if (e.Args.Length > 0 && int.TryParse(e.Args[0], out var p) && p is >= 0 and <= 5) page = p;
         var main = new MainWindow { DataContext = new MainViewModel(page) };
@@ -131,6 +134,32 @@ public partial class App : Application
             Trace("capture opened: notes");
         }
 
+        // 测试钩子:popout 直接开便签置顶小窗(md 编辑器验证用);无便签时先建一条空便签
+        if (e.Args.Contains("popout"))
+        {
+            Trace("popout branch reached");
+            var pnote = App.Data.Notes.FirstOrDefault(n => !n.Archived);
+            if (pnote is null)
+            {
+                pnote = new NoteItem();
+                App.Data.Notes.Insert(0, pnote);
+            }
+            new StickyWindow(pnote).Show();
+        }
+
+        // 测试钩子:popout=md 开第一篇 MD 文档编辑窗(MD 文档页验证用);没有就建一篇
+        if (e.Args.Any(a => a == "popout=md"))
+        {
+            Trace("popout=md branch reached");
+            var pdoc = App.Data.MdDocs.FirstOrDefault();
+            if (pdoc is null)
+            {
+                pdoc = new MdDoc();
+                App.Data.MdDocs.Insert(0, pdoc);
+            }
+            new MdDocWindow(pdoc).Show();
+        }
+
         // 测试钩子:同步执行(与点击按钮完全等价)。之前的 BeginInvoke(ApplicationIdle)
         // 从未触发过,导致自动化测试全部假阴性——教训已记
         if (e.Args.Contains("toggle"))
@@ -157,6 +186,13 @@ public partial class App : Application
         {
             Trace("davtest branch reached");
             RunDavTest();
+        }
+
+        // 测试钩子:WebView2 冒烟(md 编辑器前置闸)——运行时检测+子进程拉起+消息往返,决定 md 编辑器走 WebView2 还是回退
+        if (e.Args.Contains("mdtest"))
+        {
+            Trace("mdtest branch reached");
+            RunMdTest();
         }
 
         if (cloudNote is not null)
@@ -347,6 +383,75 @@ public partial class App : Application
         finally
         {
             try { listener.Stop(); } catch { }
+        }
+    }
+
+    // ===== WebView2 冒烟(mdtest):md 编辑器前置闸。三步断言:
+    // ①运行时已装(GetAvailableBrowserVersionString) ②Environment+子进程能拉起(本机防护拦子进程是已知风险)
+    // ③JS↔C# 消息往返。PASS → StickyWindow 走 WebView2 编辑器;FAIL → 回退纯 WPF 双态渲染。结束即退出应用 =====
+    private static async void RunMdTest()
+    {
+        Microsoft.Web.WebView2.Wpf.WebView2? wv = null;
+        var win = new Window
+        {
+            Width = 320, Height = 160, ShowInTaskbar = false, ShowActivated = false,
+            WindowStartupLocation = WindowStartupLocation.Manual, Left = -32000, Top = -32000,
+            Title = "mdtest",
+        };
+        try
+        {
+            var ver = Microsoft.Web.WebView2.Core.CoreWebView2Environment.GetAvailableBrowserVersionString();
+            if (string.IsNullOrWhiteSpace(ver)) throw new Exception("WebView2 Runtime 未安装");
+            Trace("mdtest: runtime " + ver);
+
+            // 数据目录放 Data\webview2——本机防护拦未签名 exe 写 %APPDATA%/%TEMP%,Data 目录实测放行
+            var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateAsync(
+                userDataFolder: Path.Combine(DataDir, "webview2"));
+            wv = new Microsoft.Web.WebView2.Wpf.WebView2();
+            win.Content = wv;
+            win.Show();
+
+            var ready = new TaskCompletionSource();
+            wv.CoreWebView2InitializationCompleted += (_, e2) =>
+            {
+                if (!e2.IsSuccess) ready.TrySetException(e2.InitializationException);
+            };
+            await wv.EnsureCoreWebView2Async(env); // 子进程在这里拉起
+            Trace("mdtest: corewebview2 initialized");
+
+            var pong = new TaskCompletionSource<string>();
+            wv.CoreWebView2.WebMessageReceived += (_, e2) =>
+            {
+                var msg = e2.TryGetWebMessageAsString();
+                if (msg == "ready") ready.TrySetResult();
+                else if (msg.StartsWith("pong:")) pong.TrySetResult(msg);
+            };
+            wv.CoreWebView2.NavigateToString(
+                "<html><body><script>" +
+                "window.chrome.webview.addEventListener('message',function(e){window.chrome.webview.postMessage('pong:'+e.data);});" +
+                "window.chrome.webview.postMessage('ready');" +
+                "</script></body></html>");
+
+            await Task.WhenAny(ready.Task, Task.Delay(8000));
+            if (!ready.Task.IsCompleted) throw new Exception("测试页 8s 内未就绪(子进程或导航被拦?)");
+
+            wv.CoreWebView2.PostWebMessageAsString("ping");
+            var winner = await Task.WhenAny(pong.Task, Task.Delay(6000));
+            if (winner != pong.Task) throw new Exception("消息往返 6s 无响应");
+            if (pong.Task.Result != "pong:ping") throw new Exception("消息往返内容不符: " + pong.Task.Result);
+
+            Trace("mdtest PASS (runtime " + ver + ", spawn + roundtrip OK)");
+            Toast.Show("WebView2 冒烟通过:" + ver.Split(' ')[0] + " 拉起+往返 OK", "🧪");
+        }
+        catch (Exception ex)
+        {
+            Trace("mdtest FAIL: " + ex.Message);
+            Toast.Show("WebView2 冒烟失败:" + ex.Message + "(将回退纯 WPF 渲染)", "⚠️");
+        }
+        finally
+        {
+            try { win.Close(); } catch { }
+            Application.Current.Shutdown();
         }
     }
 
@@ -608,6 +713,7 @@ public partial class App : Application
             NoteItem n => string.IsNullOrWhiteSpace(n.Content) ? "(空便签)" : n.Content,
             TaskItem t => t.Title,
             TodoItem td => td.Title,
+            MdDoc m => string.IsNullOrWhiteSpace(m.Title) ? "(无标题文档)" : m.Title,
             _ => "",
         };
         if (title.Length > 40) title = title[..40];
@@ -618,6 +724,7 @@ public partial class App : Application
             case NoteItem n: Data.Notes.Remove(n); break;
             case TaskItem t: Data.Tasks.Remove(t); break;
             case TodoItem td: Data.Todos.Remove(td); break;
+            case MdDoc m: Data.MdDocs.Remove(m); break;
         }
         Persist();
     }
@@ -638,6 +745,9 @@ public partial class App : Application
                     break;
                 case "Todo":
                     Data.Todos.Insert(0, JsonSerializer.Deserialize<TodoItem>(r.PayloadJson) ?? new TodoItem());
+                    break;
+                case "MdDoc":
+                    Data.MdDocs.Insert(0, JsonSerializer.Deserialize<MdDoc>(r.PayloadJson) ?? new MdDoc());
                     break;
                 default:
                     throw new InvalidOperationException($"未知的回收站类型「{r.Kind}」,条目已保留");
@@ -684,6 +794,7 @@ public partial class App : Application
         HookCollection(d.Notes);
         HookCollection(d.Tasks);
         HookCollection(d.Todos);
+        HookCollection(d.MdDocs);
         HookCollection(d.RecycleBin);
     }
 

@@ -15,9 +15,9 @@ public class MainViewModel : ObservableObject
     private bool _isCollapsed;
     public bool IsCollapsed { get => _isCollapsed; set => SetProperty(ref _isCollapsed, value); }
 
-    // 底部两个图标按钮的选中高亮(与 NavItems[4]/[5] 对应)
-    public bool IsRecycleSelected => ReferenceEquals(Selected, NavItems[4]);
-    public bool IsSettingsSelected => ReferenceEquals(Selected, NavItems[5]);
+    // 底部两个图标按钮的选中高亮(与 NavItems[5]/[6] 对应)
+    public bool IsRecycleSelected => ReferenceEquals(Selected, NavItems[5]);
+    public bool IsSettingsSelected => ReferenceEquals(Selected, NavItems[6]);
 
     private NavigationItem _selected = null!;
     public NavigationItem Selected
@@ -53,12 +53,13 @@ public class MainViewModel : ObservableObject
             new() { Glyph = "📝", Title = "便签",     Page = new NotesViewModel() },
             new() { Glyph = "🗂️", Title = "任务记录", Page = new TasksViewModel() },
             new() { Glyph = "✅",  Title = "待办",     Page = new TodosViewModel() },
+            new() { Glyph = "📄",  Title = "MD 文档",  Page = new MdViewModel() },
             new() { Glyph = "📦",  Title = "归档",     Page = new ArchiveViewModel() },
             new() { Glyph = "🗑️", Title = "回收站",   Page = new RecycleBinViewModel() },
             new() { Glyph = "⚙️",  Title = "设置",     Page = new SettingsViewModel() },
         };
-        TopNavItems = NavItems.Take(4).ToList();
-        BottomNavItems = NavItems.Skip(4).ToList();
+        TopNavItems = NavItems.Take(5).ToList();
+        BottomNavItems = NavItems.Skip(5).ToList();
         Selected = NavItems[Math.Clamp(initialPage, 0, NavItems.Count - 1)];
     }
 }
