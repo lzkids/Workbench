@@ -2,6 +2,22 @@
   "version": 1,
   "dependencies": {
     "net10.0-windows7.0": {
+      "Markdig": {
+        "type": "Direct",
+        "requested": "[1.6.0, )",
+        "resolved": "1.6.0",
+        "contentHash": "rJEpDfPM8wrfXUgkNejjg2bJN9bciy44uVyRwKUI+92CnSmbaLeJTLPYcCdvgM4RFsKrhs8d2H2hO78yZpMl3g=="
+      },
+      "MdXaml": {
+        "type": "Direct",
+        "requested": "[1.27.0, )",
+        "resolved": "1.27.0",
+        "contentHash": "VWhqhCeKVkJe8vkPmXuGZlRX01WDrTugOLeUvJn18jH/8DrGGVBvtgIlJoELHD2f1DiEWqF3lxxjV55vnzE7Tg==",
+        "dependencies": {
+          "AvalonEdit": "6.3.0.90",
+          "MdXaml.Plugins": "1.27.0"
+        }
+      },
       "Microsoft.Data.Sqlite": {
         "type": "Direct",
         "requested": "[10.0.14, )",
@@ -12,6 +28,12 @@
           "SQLitePCLRaw.bundle_e_sqlite3": "2.1.13",
           "SQLitePCLRaw.core": "2.1.13"
         }
+      },
+      "Microsoft.Web.WebView2": {
+        "type": "Direct",
+        "requested": "[1.0.4314.35, )",
+        "resolved": "1.0.4314.35",
+        "contentHash": "x5MFf2W03xueU1mMNvivXfHSsQ+ODo7vJ36qw/dLtU5Gs+8d7+7N7zzmNNDoT3ffosmcvZNBtUnlzyiDUuBkSQ=="
       },
       "QuestPDF": {
         "type": "Direct",
@@ -27,6 +49,16 @@
         "dependencies": {
           "WPF-UI.Abstractions": "4.3.0"
         }
+      },
+      "AvalonEdit": {
+        "type": "Transitive",
+        "resolved": "6.3.0.90",
+        "contentHash": "WVTb5MxwGqKdeasd3nG5udlV4t6OpvkFanziwI133K0/QJ5FvZmfzRQgpAjGTJhQfIA8GP7AzKQ3sTY9JOFk8Q=="
+      },
+      "MdXaml.Plugins": {
+        "type": "Transitive",
+        "resolved": "1.27.0",
+        "contentHash": "We7LtBdoukRg9mqTfa1f5n8z/GQPMKBRj3URk9DiMuqzIHkW1lTgK5njVPSScxsRt4YzW22423tSnLWNm2MJKg=="
       },
       "Microsoft.Data.Sqlite.Core": {
         "type": "Transitive",
@@ -70,6 +102,12 @@
       }
     },
     "net10.0-windows7.0/win-x64": {
+      "Microsoft.Web.WebView2": {
+        "type": "Direct",
+        "requested": "[1.0.4314.35, )",
+        "resolved": "1.0.4314.35",
+        "contentHash": "x5MFf2W03xueU1mMNvivXfHSsQ+ODo7vJ36qw/dLtU5Gs+8d7+7N7zzmNNDoT3ffosmcvZNBtUnlzyiDUuBkSQ=="
+      },
       "QuestPDF": {
         "type": "Direct",
         "requested": "[2024.12.3, )",

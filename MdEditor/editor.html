@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh_CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>md</title>
+<link rel="stylesheet" href="dist/index.css">
+<link id="ct" rel="stylesheet" href="dist/css/content-theme/light.css">
+<style>
+:root { --nb:#FEF3A2; --nfg:#3D3617; --nac:#8A7B2E; }
+html, body { margin:0; padding:0; height:100%; background: var(--nb); }
+#ed { height:100%; }
+/* 便签色注入:编辑区文字/光标/链接色跟卡片配色走(卡片永远有色底,不随深浅主题) */
+.vditor { background: transparent !important; border: none !important; }
+.vditor-ir { background: transparent !important; }
+.vditor-reset { color: var(--nfg) !important; caret-color: var(--nac) !important; }
+.vditor-reset a { color: var(--nac) !important; }
+/* 纯打字面:隐藏工具栏/计数/底部边缘 UI(语法全部手打,Typora 式) */
+.vditor-toolbar { display: none !important; }
+.vditor-counter { display: none !important; }
+.vditor-panel { display: none !important; }
+</style>
+</head>
+<body>
+<div id="ed"></div>
+<script src="dist/index.min.js"></script>
+<script>
+(function () {
+  var vd = null; var muted = false; var dark = false; var cur = '';
+  function post(m) { try { window.chrome.webview.postMessage(m); } catch (e) { } }
+
+  // 重建式换肤:Vditor 不支持运行时切主题,内容从 cur 恢复(cur 在 input 里持续跟踪,是 JS 侧真值)
+  function build(value) {
+    var el = document.getElementById('ed');
+    if (vd) { try { vd.destroy(); } catch (e) { } vd = null; }
+    vd = new Vditor(el, {
+      mode: 'ir',                      // 即时渲染 = Typora 式:输入语法后自动渲染,光标回入显示原文
+      lang: 'zh_CN',
+      cdn: '.',                        // 资产全部本地(虚拟域名根),禁 CDN
+      theme: dark ? 'dark' : 'light',
+      value: value || '',
+      toolbar: [],
+      cache: { enable: false },
+      counter: { enable: false },
+      height: '100%',
+      resize: { enable: false },
+      preview: { theme: { current: dark ? 'dark' : 'light', path: 'dist/css/content-theme/' } },
+      input: function (v) { cur = v; if (!muted) post({ type: 'input', value: v }); },
+      blur: function () { post({ type: 'blur' }); },
+      after: function () {
+        post({ type: 'ready' });
+        // 视口诊断:宿主可见宽度 vs 实际排版宽度(排查 h-scroll 错配)
+        var el2 = document.getElementById('ed');
+        var rs = el2.querySelector('.vditor-reset');
+        setTimeout(function () {
+          post({
+            type: 'metrics',
+            innerW: window.innerWidth, innerH: window.innerHeight,
+            edW: el2.offsetWidth, edH: el2.offsetHeight,
+            resetW: rs ? rs.getBoundingClientRect().width : -1,
+            scrollW: document.documentElement.scrollWidth,
+            bodyScrollW: document.body.scrollWidth
+          });
+        }, 300);
+      }
+    });
+  }
+
+  window.chrome.webview.addEventListener('message', function (e) {
+    var m = e.data || {};
+    if (m.type === 'init') {
+      dark = !!m.dark;
+      document.documentElement.style.setProperty('--nb', m.bg || '#FEF3A2');
+      document.documentElement.style.setProperty('--nfg', m.fg || '#3D3617');
+      document.documentElement.style.setProperty('--nac', m.accent || '#8A7B2E');
+      var ct = document.getElementById('ct');
+      if (ct) ct.href = dark ? 'dist/css/content-theme/dark.css' : 'dist/css/content-theme/light.css';
+      cur = m.content || '';
+      build(cur);
+    } else if (m.type === 'content') {   // 外部改了内容(如卡片同步),整段替换
+      cur = m.value || '';
+      if (vd) { muted = true; try { vd.setValue(cur); } catch (e2) { } muted = false; }
+    } else if (m.type === 'theme') {     // 深浅主题切换(MD 文档窗还会带新配色,便签小窗沿用卡片色)
+      dark = !!m.dark;
+      if (m.bg) document.documentElement.style.setProperty('--nb', m.bg);
+      if (m.fg) document.documentElement.style.setProperty('--nfg', m.fg);
+      if (m.accent) document.documentElement.style.setProperty('--nac', m.accent);
+      var ct = document.getElementById('ct');
+      if (ct) ct.href = dark ? 'dist/css/content-theme/dark.css' : 'dist/css/content-theme/light.css';
+      build(cur);
+    }
+  });
+
+  post({ type: 'boot' });
+
+  // 无 WebView2 宿主(浏览器直开调试)时自演示,600ms 内宿主没来就算浏览器态
+  setTimeout(function () {
+    if (!vd && dark === false && cur === '') {
+      cur = '# 会议纪要模板\n\n**要点** 加粗、*斜体*、~~删除线~~、`行内代码`\n\n- [x] 已完成项\n- [ ] 待办项\n1. 编号列表\n\n> 引用一行提示\n\n[链接](https://example.com)';
+      build(cur);
+    }
+  }, 600);
+})();
+</script>
+</body>
+</html>

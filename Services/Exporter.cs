@@ -1,3 +1,7 @@
+using Markdig;
+using Markdig.Extensions;
+using Markdig.Extensions.Hardlines;
+using Markdig.Parsers;
 using System.IO;
 using System.Text;
 using QuestPDF.Fluent;
@@ -53,6 +57,21 @@ public static class Exporter
     private static string Escape(string s)
         => s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
 
+    // 便签 Markdown → HTML(HTML 导出用):高级扩展(表格/任务列表/自动链接)+ 软换行当硬换行(便签手写习惯),
+    // 裸 HTML 一律禁直出(防导出文件被注入,语法以文本呈现);异常时退回转义纯文本,绝不因内容炸掉导出
+    private static readonly Markdig.MarkdownPipeline MdPipeline = new Markdig.MarkdownPipelineBuilder()
+        .UseAdvancedExtensions()
+        .UseSoftlineBreakAsHardlineBreak()
+        .DisableHtml()
+        .Build();
+
+    private static string MdToHtml(string? s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return "";
+        try { return Markdig.Markdown.ToHtml(s, MdPipeline); }
+        catch { return "<p>" + Escape(s) + "</p>"; }
+    }
+
     // Markdown 单元格转义(审计修复):竖线破坏表格列,换行破坏行结构
     private static string MdCell(string s)
         => Escape(s).Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ");
@@ -67,7 +86,17 @@ h1{font-size:22px}h2{font-size:17px;margin-top:28px;border-bottom:2px solid #e5e
 table{border-collapse:collapse;width:100%;background:#fff;font-size:13px}
 td,th{border:1px solid #e5e7eb;padding:7px 10px;text-align:left}
 th{background:#f3f4f6}
-.note{background:#fef3a2;border-radius:8px;padding:10px 12px;margin:8px 0;white-space:pre-wrap;font-size:13px}
+.note{background:#fef3a2;border-radius:8px;padding:10px 12px;margin:8px 0;font-size:13px}
+.note p{margin:0 0 6px}.note p:last-child{margin-bottom:0}
+.note h1,.note h2,.note h3,.note h4{font-size:14px;margin:8px 0 4px}
+.note code{background:rgba(0,0,0,.08);border-radius:3px;padding:0 3px;font-family:Consolas,monospace;font-size:12px}
+.note pre{background:rgba(0,0,0,.08);border-radius:4px;padding:6px;overflow:auto;white-space:pre-wrap}
+.note pre code{background:transparent;padding:0}
+.note blockquote{border-left:3px solid #d1a900;margin:4px 0;padding:2px 8px;color:#6b5e1e}
+.note table{border-collapse:collapse;font-size:12px;width:auto;background:transparent}
+.note td,.note th{border:1px solid #d9c96a;padding:3px 8px}
+.note input[type=checkbox]{margin-right:4px;vertical-align:middle}
+.note hr{border:none;border-top:1px solid #d9c96a;margin:8px 0}
 .meta{color:#9ca3af;font-size:11px}
 .badge{display:inline-block;border-radius:10px;padding:1px 9px;font-size:11px;background:#ececec;margin-right:6px}
 .done{text-decoration:line-through;color:#9ca3af}
@@ -81,7 +110,7 @@ ul{list-style:none;padding-left:4px}li{margin:6px 0;font-size:14px}
         foreach (var n in d.Notes)
         {
             sb.Append($"<div class=note><span class=meta>{n.CreatedAt:MM-dd HH:mm}</span><br>")
-              .Append(Escape(n.Content)).Append("</div>");
+              .Append(MdToHtml(n.Content)).Append("</div>");
         }
 
         sb.Append($"<h2>🗂️ 任务记录({d.Tasks.Count})</h2><table><tr><th>标题</th><th>状态</th><th>更新时间</th></tr>");

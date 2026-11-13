@@ -2,6 +2,7 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:mdxam="clr-namespace:MdXaml;assembly=MdXaml"
              xmlns:local="clr-namespace:Workbench.Views">
 
     <UserControl.Resources>
@@ -99,15 +100,24 @@
                                                    Foreground="{Binding ColorKey, Converter={StaticResource NoteBrush}, ConverterParameter=accent}"
                                                    VerticalAlignment="Center"/>
                                     </DockPanel>
-                                    <!-- 卡片即编辑:点击直接打字,输完即存(数据已在内存,窗口关闭/切页时落盘) -->
-                                    <TextBox Text="{Binding Content, UpdateSourceTrigger=PropertyChanged}"
-                                             Background="Transparent" BorderThickness="0"
-                                             AcceptsReturn="True" TextWrapping="Wrap"
-                                             FontSize="13"
-                                             Foreground="{Binding ColorKey, Converter={StaticResource NoteBrush}, ConverterParameter=fg}"
-                                             CaretBrush="{Binding ColorKey, Converter={StaticResource NoteBrush}, ConverterParameter=accent}"
-                                             VerticalScrollBarVisibility="Auto" Margin="0,6,0,0"
-                                             LostFocus="NoteEdit_LostFocus"/>
+                                    <!-- 卡片双态:非编辑=Markdown 渲染视图(MdXaml),点击=切原文编辑(Typora 视觉,零进程开销)。
+                                         链接点击被 Hyperlink 内部处理不冒泡,仍可直接打开;卡片失焦自动回渲染态 -->
+                                    <Grid Margin="0,6,0,0" Background="Transparent"
+                                          MouseLeftButtonDown="CardGrid_MouseLeftButtonDown">
+                                        <TextBox Text="{Binding Content, UpdateSourceTrigger=PropertyChanged}"
+                                                 Visibility="Collapsed"
+                                                 Background="Transparent" BorderThickness="0"
+                                                 AcceptsReturn="True" TextWrapping="Wrap"
+                                                 FontSize="13"
+                                                 Foreground="{Binding ColorKey, Converter={StaticResource NoteBrush}, ConverterParameter=fg}"
+                                                 CaretBrush="{Binding ColorKey, Converter={StaticResource NoteBrush}, ConverterParameter=accent}"
+                                                 VerticalScrollBarVisibility="Auto"
+                                                 LostFocus="NoteEdit_LostFocus"/>
+                                        <mdxam:MarkdownScrollViewer Markdown="{Binding Content, Mode=OneWay}"
+                                                                    Background="Transparent"
+                                                                    FontSize="13"
+                                                                    Foreground="{Binding ColorKey, Converter={StaticResource NoteBrush}, ConverterParameter=fg}"/>
+                                    </Grid>
                                 </DockPanel>
                                 <!-- 右下角拖拽调整卡片大小 -->
                                 <Thumb Width="12" Height="12" HorizontalAlignment="Right" VerticalAlignment="Bottom"

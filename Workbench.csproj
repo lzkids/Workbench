@@ -9,16 +9,24 @@
     <UseWindowsForms>true</UseWindowsForms>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>0.0.6</Version>
+    <Version>0.0.7</Version>
     <RootNamespace>Workbench</RootNamespace>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
+    <PackageReference Include="Markdig" Version="1.6.0" />
+    <PackageReference Include="MdXaml" Version="1.27.0" />
     <PackageReference Include="WPF-UI" Version="4.3.0" />
     <PackageReference Include="QuestPDF" Version="2024.12.3" />
     <Resource Include="Assets\app.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- md 编辑器离线资产(Vditor 精简 dist + 胶水页):整体拷贝到输出/发布目录 -->
+    <None Include="MdEditor\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
