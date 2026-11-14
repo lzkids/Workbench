@@ -1,5 +1,26 @@
 # 更新日志
 
+## 0.0.8（2026-11-14 发布）
+
+### 新增
+- **Markdown 编辑窗文件树侧栏**：左侧列出全部 Markdown 文档，点击原地切换编辑（带单实例去重与空文档防孤儿），可折叠成窄条；侧栏内可直接新建文档
+- **markmap 思维导图**：文档里写 ```markmap 代码块（内容用 markdown 列表层级）即渲染成彩色可交互思维导图（Vditor 自带能力，补回打包时剔除的 markmap 资产，离线可用）
+- **Markdown 编辑窗常用语法工具栏**：标题/粗斜删/列表/任务/引用/代码/链接/表格/撤销重做一键直达（便签小窗保持纯打字面不变）
+- **Markdown 文档归档**：文档卡片一键归档，归档页新增「📄 Markdown」分组可恢复；归档/删除自动关闭该文档已打开的编辑窗
+
+### 修复
+- **浅色模式可见性**：Markdown 文档卡片改次级底色+分隔线描边（白底白页有明确边界），删除按钮改危险红一眼可辨；编辑窗内容区同样加卡片底与描边
+- **新建文档瞬间内容区发黑**：WebView2 首绘前默认底色（黑）改为透明，底色由窗口/便签卡片提供；便签小窗同样受益
+
+### 安全（run-4 审计修复）
+- **WebView2 桥/导航钉死到本机编辑器**（审计候选 `workbench.mdeditor.core-not-origin-bound` 处置）：消息桥按 `e.Source` 只放行 `https://md.local` 编辑器页；主框架 NavigationStarting 取消一切非 md.local 导航；NewWindowRequested 一律不进 app 弹窗——http(s) 外链改走系统默认浏览器（Vditor `link.click` 回调接管，编辑器不再 window.open）；editor.html 加 CSP 兜底。「boot 换全文 / input 写库」的桥协议从此只可能被本地编辑器页触达
+- **HTML 导出链接 scheme 白名单**（审计候选 `exporter.mdtohtml.unsafe-link-scheme-href` 处置）：MdToHtml 输出对 href 做白名单（http/https/mailto/tel/ftp/相对路径与锚点），javascript:/data: 等一律中和成 `#`，scheme 判定先做 HTML 实体解码防变体；导出模板加 CSP meta
+- **三条加固**：回收站恢复 null 兜底改按解析失败处理（防损坏 payload 静默变空条目）；云推送落盘失败即中止上传（防陈旧快照覆盖云端较新数据）；SqliteStore md 表补列升级路径
+
+### 调整
+- 界面名称:「MD 文档」更名为「Markdown」(MD 即 Markdown 的扩展名 .md 简称)
+- Markdown 页顶部移除「上传/同步」按钮（页面只留文档列表；云同步入口仍在便签/归档/回收站页与设置）
+
 ## 0.0.7（2026-11-13 发布）
 
 ### 新增
