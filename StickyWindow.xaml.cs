@@ -22,6 +22,8 @@ public partial class StickyWindow : Window
     public StickyWindow(NoteItem note)
     {
         InitializeComponent();
+        // 首绘前 WebView2 默认底色是黑,改透明由便签卡片底色供底
+        Editor.DefaultBackgroundColor = System.Drawing.Color.Transparent;
         DataContext = note;
         note.PropertyChanged += Note_PropertyChanged;
         _ = InitEditorAsync(note);
@@ -89,10 +91,15 @@ public partial class StickyWindow : Window
                     App.Persist();
                     break;
 
-                case "metrics": // 视口诊断(临时)
-                    App.Trace($"sticky metrics: innerW={root.GetProperty("innerW").GetInt32()} edW={root.GetProperty("edW").GetInt32()} " +
-                              $"resetW={root.GetProperty("resetW").GetDouble():F0} scrollW={root.GetProperty("scrollW").GetInt32()} " +
-                              $"bodyScrollW={root.GetProperty("bodyScrollW").GetInt32()}");
+                case "openlink": // 外链走系统默认浏览器(run-4:不再进 WebView2 弹窗)
+                    if (root.TryGetProperty("url", out var ol) && ol.GetString() is string link)
+                        MdEditor.OpenInSystemBrowser(link);
+                    break;
+
+                case "metrics": // 视口诊断(run-4 加固:TryGet 系解析,异常驱动改缺省值)
+                    App.Trace($"sticky metrics: innerW={MdEditor.TryGetI(root, "innerW")} edW={MdEditor.TryGetI(root, "edW")} " +
+                              $"resetW={MdEditor.TryGetD(root, "resetW")} scrollW={MdEditor.TryGetI(root, "scrollW")} " +
+                              $"bodyScrollW={MdEditor.TryGetI(root, "bodyScrollW")}");
                     break;
             }
         }

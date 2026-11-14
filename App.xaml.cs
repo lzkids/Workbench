@@ -667,15 +667,18 @@ public partial class App : Application
     // ===== 归档流转 =====
     public static void MoveToArchive(object item)
     {
-        // 便签归档时同步关闭它的置顶小窗
+        // 便签归档时同步关闭它的置顶小窗;MD 文档归档时同步关闭它的编辑窗
         if (item is NoteItem archivedNote)
             CloseStickyFor(archivedNote);
+        if (item is MdDoc archivedDoc)
+            CloseMdDocWindowsFor(archivedDoc);
 
         switch (item)
         {
             case NoteItem n: n.Archived = true; n.ArchivedAt = DateTime.Now; break;
             case TaskItem t: t.Archived = true; t.ArchivedAt = DateTime.Now; break;
             case TodoItem td: td.Archived = true; td.ArchivedAt = DateTime.Now; break;
+            case MdDoc m: m.Archived = true; m.ArchivedAt = DateTime.Now; break;
         }
         Persist();
     }
@@ -689,6 +692,15 @@ public partial class App : Application
             w.Close();
     }
 
+    // 关闭某篇 MD 文档的编辑窗(归档/删除时调用)
+    private static void CloseMdDocWindowsFor(MdDoc doc)
+    {
+        foreach (var w in System.Windows.Application.Current.Windows
+                     .OfType<MdDocWindow>()
+                     .Where(w => ReferenceEquals(w.DataContext, doc)).ToList())
+            w.Close();
+    }
+
     public static void RestoreFromArchive(object item)
     {
         switch (item)
@@ -696,6 +708,7 @@ public partial class App : Application
             case NoteItem n: n.Archived = false; n.ArchivedAt = null; break;
             case TaskItem t: t.Archived = false; t.ArchivedAt = null; break;
             case TodoItem td: td.Archived = false; td.ArchivedAt = null; break;
+            case MdDoc m: m.Archived = false; m.ArchivedAt = null; break;
         }
         Persist();
     }
@@ -703,9 +716,11 @@ public partial class App : Application
     // ===== 回收站流转 =====
     public static void MoveToRecycle(string kind, object item)
     {
-        // 便签被删除时,同步关闭它的置顶小窗(避免"卡片没了窗还在")
+        // 便签被删除时,同步关闭它的置顶小窗;MD 文档被删除时,同步关闭它的编辑窗(避免"条目没了窗还在")
         if (item is NoteItem deletedNote)
             CloseStickyFor(deletedNote);
+        if (item is MdDoc deletedDoc)
+            CloseMdDocWindowsFor(deletedDoc);
 
         var json = JsonSerializer.Serialize(item);
         var title = item switch
@@ -738,16 +753,24 @@ public partial class App : Application
             switch (r.Kind)
             {
                 case "Note":
-                    Data.Notes.Insert(0, JsonSerializer.Deserialize<NoteItem>(r.PayloadJson) ?? new NoteItem());
+                    var note = JsonSerializer.Deserialize<NoteItem>(r.PayloadJson)
+                        ?? throw new InvalidOperationException("payload 解析结果为空(内容静默丢失防线,run-4 加固)");
+                    Data.Notes.Insert(0, note);
                     break;
                 case "Task":
-                    Data.Tasks.Insert(0, JsonSerializer.Deserialize<TaskItem>(r.PayloadJson) ?? new TaskItem());
+                    var task = JsonSerializer.Deserialize<TaskItem>(r.PayloadJson)
+                        ?? throw new InvalidOperationException("payload 解析结果为空");
+                    Data.Tasks.Insert(0, task);
                     break;
                 case "Todo":
-                    Data.Todos.Insert(0, JsonSerializer.Deserialize<TodoItem>(r.PayloadJson) ?? new TodoItem());
+                    var todo = JsonSerializer.Deserialize<TodoItem>(r.PayloadJson)
+                        ?? throw new InvalidOperationException("payload 解析结果为空");
+                    Data.Todos.Insert(0, todo);
                     break;
                 case "MdDoc":
-                    Data.MdDocs.Insert(0, JsonSerializer.Deserialize<MdDoc>(r.PayloadJson) ?? new MdDoc());
+                    var mdoc = JsonSerializer.Deserialize<MdDoc>(r.PayloadJson)
+                        ?? throw new InvalidOperationException("payload 解析结果为空");
+                    Data.MdDocs.Insert(0, mdoc);
                     break;
                 default:
                     throw new InvalidOperationException($"未知的回收站类型「{r.Kind}」,条目已保留");
@@ -824,10 +847,11 @@ public partial class App : Application
 
     // 骨架采用"操作后手动保存";现在另有自动保存双保险。
     // 保存前顺手收集标签:任何地方用了新标签,一次保存后就进下拉池
-    public static void Persist()
+    // run-4 审计加固:返回落盘成败,云推送据此决定是否中止(防本地写库失败时把陈旧快照覆盖云端较新数据)
+    public static bool Persist()
     {
         CollectTags();
-        Store.Save(Data);
+        return Store.Save(Data);
     }
 
     private static void CollectTags()

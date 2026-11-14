@@ -9,7 +9,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>0.0.7</Version>
+    <Version>0.0.8</Version>
     <RootNamespace>Workbench</RootNamespace>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>

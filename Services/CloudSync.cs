@@ -161,7 +161,9 @@ public static class CloudSync
         if (!TryBegin()) throw new InvalidOperationException("已有云同步操作在进行,请稍后再试");
         try
         {
-            App.Persist(); // 先把防抖窗口里的改动落盘,快照才是最新的
+            // run-4 审计加固:落盘失败(磁盘满/权限)不得把陈旧快照推上云端覆盖较新远端,中止上传
+            if (!App.Persist())
+                throw new InvalidOperationException("本地落盘失败,已中止上传(防陈旧快照覆盖云端;本地数据仍在界面与内存中)");
             var snapshot = App.Store.SnapshotToBytes();
             if (snapshot.Length == 0)
                 throw new InvalidOperationException("数据快照为空,拒绝上传(防把云端有效数据覆盖成空文件)");

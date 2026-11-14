@@ -68,8 +68,35 @@ public static class Exporter
     private static string MdToHtml(string? s)
     {
         if (string.IsNullOrWhiteSpace(s)) return "";
-        try { return Markdig.Markdown.ToHtml(s, MdPipeline); }
+        try { return SanitizeLinks(Markdig.Markdown.ToHtml(s, MdPipeline)); }
         catch { return "<p>" + Escape(s) + "</p>"; }
+    }
+
+    // run-4 审计修复(exporter.mdtohtml.unsafe-link-scheme-href):DisableHtml 只禁裸 HTML,不约束
+    // [x](url) 的目标——CommonMark 允许 javascript:/data: 原样进 href。对渲染结果做 href scheme
+    // 白名单(http/https/mailto/tel/ftp/相对路径与锚点),unsafe 目标一律中和成 href="#";
+    // scheme 判定先做 HTML 实体解码,防 java&#115;cript: 类实体变体;大小写不敏感。
+    private static readonly System.Text.RegularExpressions.Regex HrefRegex =
+        new("href=\"([^\"]*)\"", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static string SanitizeLinks(string html)
+    {
+        return HrefRegex.Replace(html, m =>
+        {
+            var raw = System.Net.WebUtility.HtmlDecode(m.Groups[1].Value);
+            var colon = raw.IndexOf(':');
+            if (colon >= 0)
+            {
+                var slash = raw.IndexOf('/');
+                if (slash < 0 || slash > colon) // 冒号在首个斜杠前=带 scheme,须白名单
+                {
+                    var scheme = raw[..colon].Trim().ToLowerInvariant();
+                    if (scheme is not ("http" or "https" or "mailto" or "tel" or "ftp"))
+                        return "href=\"#\"";
+                }
+            }
+            return m.Value; // 相对路径/锚点/白名单 scheme 原样保留
+        });
     }
 
     // Markdown 单元格转义(审计修复):竖线破坏表格列,换行破坏行结构
@@ -80,7 +107,8 @@ public static class Exporter
     {
         var sb = new StringBuilder();
         sb.Append("""
-<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8"><title>工作台导出</title><style>
+<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8"><title>工作台导出</title>
+<meta http-equiv="Content-Security-Policy" content="script-src 'none'; style-src 'unsafe-inline'; img-src http: https: data:"><style>
 body{font-family:"Microsoft YaHei",sans-serif;max-width:860px;margin:32px auto;padding:0 16px;color:#1f2937;background:#f7f8fa}
 h1{font-size:22px}h2{font-size:17px;margin-top:28px;border-bottom:2px solid #e5e7eb;padding-bottom:6px}
 table{border-collapse:collapse;width:100%;background:#fff;font-size:13px}

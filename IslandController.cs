@@ -201,7 +201,7 @@ public class IslandController
         ("notes", "📝", "便签"),
         ("tasks", "🗂️", "任务记录"),
         ("todos", "✅", "待办"),
-        ("md", "📄", "MD 文档"),
+        ("md", "📄", "Markdown"),
     };
 
     // 点岛上的入口 → 快速记录窗(不再弹整页):

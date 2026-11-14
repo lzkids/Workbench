@@ -6,17 +6,8 @@
     <DockPanel>
         <Border DockPanel.Dock="Top" Padding="0,0,0,12">
             <DockPanel LastChildFill="False">
-                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
-                    <ui:Button Command="{Binding Cloud.CloudPushCommand}"
-                               Content="☁️ 上传"
-                               IsEnabled="{Binding Cloud.CloudIdle}"
-                               ToolTip="把本地数据上传到云端备份(便签/任务/待办/MD 文档一起)"/>
-                    <ui:Button Command="{Binding Cloud.CloudSyncCommand}"
-                               Content="⬇ 同步"
-                               IsEnabled="{Binding Cloud.CloudIdle}"
-                               Margin="8,0,0,0"
-                               ToolTip="用云端数据覆盖本地(重启应用后生效;本地现状会先备份到云端 .bak)"/>
-                </StackPanel>
+                <TextBlock Text="独立 Markdown 文档,点击卡片弹出编辑窗" FontSize="12" VerticalAlignment="Center"
+                           Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
                 <ui:Button Command="{Binding NewCommand}"
                            Content="＋ 新建文档"
                            Appearance="Primary"
@@ -30,11 +21,21 @@
                 <ItemsControl ItemsSource="{Binding Items}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <ui:Card Padding="12,9" Margin="0,0,0,10" MouseLeftButtonDown="OpenDoc_Click" Cursor="Hand">
+                            <!-- 次级底色+分隔线描边:浅色下白底白页有明确边界,深色同样成立 -->
+                            <Border Background="{DynamicResource SolidBackgroundFillColorSecondaryBrush}"
+                                    BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
+                                    BorderThickness="1" CornerRadius="8"
+                                    Padding="12,9" Margin="0,0,0,10"
+                                    MouseLeftButtonDown="OpenDoc_Click" Cursor="Hand">
                                 <DockPanel>
                                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                                        <ui:Button DockPanel.Dock="Right" Content="✕" Width="28" Height="28"
-                                                   Appearance="Secondary" Padding="2,0" ToolTip="删除(进回收站)"
+                                        <ui:Button Content="📦" Width="30" Height="30"
+                                                   Appearance="Secondary" Padding="2,0" ToolTip="归档(可在归档页恢复)"
+                                                   Command="{Binding DataContext.ArchiveCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                   CommandParameter="{Binding}"/>
+                                        <!-- 删除按钮用危险红:浅色下也一眼可辨 -->
+                                        <ui:Button Content="✕" Width="30" Height="30"
+                                                   Appearance="Danger" Padding="2,0" Margin="8,0,0,0" ToolTip="删除(进回收站)"
                                                    Command="{Binding DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                    CommandParameter="{Binding}"/>
                                     </StackPanel>
@@ -47,12 +48,12 @@
                                                    Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
                                     </StackPanel>
                                 </DockPanel>
-                            </ui:Card>
+                            </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </ScrollViewer>
-            <TextBlock Text="📄 还没有 MD 文档,点上方「新建文档」开始" FontSize="13"
+            <TextBlock Text="📄 还没有 Markdown 文档,点上方「新建文档」开始" FontSize="13"
                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                        HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-60,0,0">
                 <TextBlock.Style>

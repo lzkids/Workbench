@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Linq;
-using System.Windows;
+using System.Windows.Data;
 using Workbench.Models;
 
 namespace Workbench.ViewModels;
@@ -11,11 +12,11 @@ public class MdViewModel : ObservableObject
 {
     public ObservableCollection<MdDoc> Items => App.Data.MdDocs;
 
-    // 云同步快捷按钮:与便签/归档/回收站页同一套(CloudSyncBar)
-    public CloudSyncBar Cloud { get; } = new();
+    private ICollectionView? _view;
 
     public RelayCommand NewCommand { get; }
     public RelayCommand OpenCommand { get; }
+    public RelayCommand ArchiveCommand { get; }
     public RelayCommand DeleteCommand { get; }
 
     public MdViewModel()
@@ -41,9 +42,22 @@ public class MdViewModel : ObservableObject
             }
         });
 
+        ArchiveCommand = new RelayCommand(p =>
+        {
+            if (p is MdDoc doc) App.MoveToArchive(doc);
+            RefreshFilter(); // 归档后立即从列表消失
+        });
+
         DeleteCommand = new RelayCommand(p =>
         {
             if (p is MdDoc doc) App.MoveToRecycle("MdDoc", doc);
         });
+
+        // 只显示未归档的(归档的进归档页)
+        _view = CollectionViewSource.GetDefaultView(Items);
+        _view.Filter = o => o is MdDoc m && !m.Archived;
     }
+
+    // 页面到达/归档动作后手动刷新过滤视图
+    public void RefreshFilter() => _view?.Refresh();
 }

@@ -67,6 +67,7 @@ public class ArchiveViewModel : ObservableObject
             n.Content.Length > 40 ? n.Content[..40] : n.Content);
         AddKind("Task", "任务", "🗂️", App.Data.Tasks.Where(t => t.Archived), t => t.ArchivedAt, t => t.Title);
         AddKind("Todo", "待办", "✅", App.Data.Todos.Where(t => t.Archived), t => t.ArchivedAt, t => t.Title);
+        AddKind("MdDoc", "Markdown", "📄", App.Data.MdDocs.Where(m => m.Archived), m => m.ArchivedAt, m => m.Title);
 
         if (Groups.Count == 0)
             IsEmpty = true;

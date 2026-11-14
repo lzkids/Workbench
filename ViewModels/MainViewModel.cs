@@ -36,6 +36,7 @@ public class MainViewModel : ObservableObject
                     case NotesViewModel p: p.RefreshFilter(); break;
                     case TasksViewModel p: p.RefreshFilter(); break;
                     case TodosViewModel p: p.RefreshSort(); break;
+                    case MdViewModel p: p.RefreshFilter(); break;
                     case ArchiveViewModel p: p.Rebuild(); break;
                 }
             }
@@ -53,7 +54,7 @@ public class MainViewModel : ObservableObject
             new() { Glyph = "📝", Title = "便签",     Page = new NotesViewModel() },
             new() { Glyph = "🗂️", Title = "任务记录", Page = new TasksViewModel() },
             new() { Glyph = "✅",  Title = "待办",     Page = new TodosViewModel() },
-            new() { Glyph = "📄",  Title = "MD 文档",  Page = new MdViewModel() },
+            new() { Glyph = "📄",  Title = "Markdown",  Page = new MdViewModel() },
             new() { Glyph = "📦",  Title = "归档",     Page = new ArchiveViewModel() },
             new() { Glyph = "🗑️", Title = "回收站",   Page = new RecycleBinViewModel() },
             new() { Glyph = "⚙️",  Title = "设置",     Page = new SettingsViewModel() },

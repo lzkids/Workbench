@@ -368,6 +368,9 @@ public class SqliteStore : IDataStore
         EnsureColumn(conn, "todos", "archived", "INTEGER");
         EnsureColumn(conn, "todos", "archived_at", "TEXT");
         EnsureColumn(conn, "todos", "completed_at", "TEXT");
+        // run-4 审计加固:md 表补列升级路径与 notes/tasks/todos 同构(防外部产生的遗留 schema 使 Load 中止)
+        EnsureColumn(conn, "md", "archived", "INTEGER");
+        EnsureColumn(conn, "md", "archived_at", "TEXT");
     }
 
     private static void EnsureColumn(SqliteConnection conn, string table, string column, string ddlType)

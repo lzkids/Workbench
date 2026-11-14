@@ -18,10 +18,73 @@ public partial class MdDocWindow : FluentWindow
     public MdDocWindow(MdDoc doc)
     {
         InitializeComponent();
+        // 首绘前 WebView2 默认底色是黑(用户可见的"黑色内容区"),改透明由下方 Border 卡片供底
+        Editor.DefaultBackgroundColor = System.Drawing.Color.Transparent;
         DataContext = doc;
         doc.PropertyChanged += Doc_PropertyChanged;
-        TitleBar.Title = string.IsNullOrWhiteSpace(doc.Title) ? "MD 文档" : doc.Title;
+        TitleBar.Title = string.IsNullOrWhiteSpace(doc.Title) ? "Markdown" : doc.Title;
+        // 文件树侧栏:全部 MD 文档(集合引用,增删自动跟随;标题 INPC 实时刷新)
+        DocList.ItemsSource = App.Data.MdDocs;
+        DocList.SelectedItem = doc;
         _ = InitEditorAsync(doc);
+    }
+
+    // ===== 文件树侧栏 =====
+
+    private bool _sidebarExpanded = true;
+
+    private void ToggleSidebar_Click(object sender, RoutedEventArgs e)
+    {
+        _sidebarExpanded = !_sidebarExpanded;
+        SidebarCol.Width = _sidebarExpanded ? new GridLength(200) : new GridLength(28);
+        Sidebar.Visibility = _sidebarExpanded ? Visibility.Visible : Visibility.Collapsed;
+        SidebarRail.Visibility = _sidebarExpanded ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void NewDoc_Click(object sender, RoutedEventArgs e)
+    {
+        var doc = new MdDoc();
+        App.Data.MdDocs.Insert(0, doc);
+        App.Persist();
+        SwitchToDoc(doc);
+    }
+
+    private void DocList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        // 点列表切文档;代码侧的选中同步会再次触发,这里靠 ReferenceEquals 短路
+        if (DocList.SelectedItem is MdDoc doc && !ReferenceEquals(DataContext, doc))
+            SwitchToDoc(doc);
+    }
+
+    // 原地切换正在编辑的文档:换 DataContext 并让编辑器整段重建(内容/配色);别处开着同文档窗则关闭防双开
+    private void SwitchToDoc(MdDoc doc)
+    {
+        foreach (var w in Application.Current.Windows
+                     .OfType<MdDocWindow>()
+                     .Where(w => !ReferenceEquals(w, this) && ReferenceEquals(w.DataContext, doc)).ToList())
+            w.Close(); // 空文档会在其 Closed 里被丢弃,下面补回列防孤儿
+
+        if (!App.Data.MdDocs.Contains(doc))
+            App.Data.MdDocs.Insert(0, doc);
+
+        if (DataContext is MdDoc old)
+            old.PropertyChanged -= Doc_PropertyChanged;
+        DataContext = doc;
+        doc.PropertyChanged += Doc_PropertyChanged;
+        TitleBar.Title = string.IsNullOrWhiteSpace(doc.Title) ? "Markdown" : doc.Title;
+        DocList.SelectedItem = doc;
+        if (_mdReady)
+        {
+            var (bg, fg, accent) = ThemeColors();
+            Editor.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new
+            {
+                type = "init",
+                content = doc.Content ?? "",
+                dark = IsAppDark(),
+                bg, fg, accent,
+                toolbar = true,
+            }));
+        }
     }
 
     private static bool IsAppDark() => string.Equals(App.Data.Theme, "Dark", StringComparison.OrdinalIgnoreCase);
@@ -62,6 +125,7 @@ public partial class MdDocWindow : FluentWindow
             content = doc.Content ?? "",
             dark = IsAppDark(),
             bg, fg, accent,
+            toolbar = true, // MD 文档窗带常用语法工具栏(便签小窗不带=纯打字面)
         }));
     }
 
@@ -98,9 +162,13 @@ public partial class MdDocWindow : FluentWindow
                     App.Persist();
                     break;
 
-                case "metrics":
-                    App.Trace($"md doc metrics: innerW={root.GetProperty("innerW").GetInt32()} " +
-                              $"scrollW={root.GetProperty("scrollW").GetInt32()}");
+                case "openlink": // 外链走系统默认浏览器(run-4:不再进 WebView2 弹窗)
+                    if (root.TryGetProperty("url", out var ol) && ol.GetString() is string link)
+                        MdEditor.OpenInSystemBrowser(link);
+                    break;
+
+                case "metrics": // 视口诊断(run-4 加固:TryGet 系解析,异常驱动改缺省值)
+                    App.Trace($"md doc metrics: innerW={MdEditor.TryGetI(root, "innerW")} scrollW={MdEditor.TryGetI(root, "scrollW")}");
                     break;
             }
         }
