@@ -27,6 +27,19 @@ public static class MdEditor
         var core = editor.CoreWebView2;
         core.SetVirtualHostNameToFolderMapping(
             "md.local", App.MdEditorDir, CoreWebView2HostResourceAccessKind.Allow);
+        // 像素风字体映射收窄到 Fonts 子目录(run-5 审计:整根映射会让 Data\webdav.json 进入网页可达面)
+        core.SetVirtualHostNameToFolderMapping(
+            "fonts.local", Path.Combine(AppContext.BaseDirectory, "Fonts"), CoreWebView2HostResourceAccessKind.Allow);
+        // run-5 审计修复:阻断内容驱动外发——Muya 默认 plantumlServer 硬编码 plantuml.com,
+        // 打开含 plantuml 围栏的文档会把围栏全文编码后外发公共第三方;宿主侧按 URL 拦截(图片上下文)
+        core.AddWebResourceRequestedFilter("https://www.plantuml.com/*", CoreWebView2WebResourceContext.Image);
+        core.AddWebResourceRequestedFilter("http://www.plantuml.com/*", CoreWebView2WebResourceContext.Image);
+        core.WebResourceRequested += (_, e) =>
+        {
+            if (e.Request.Uri.Contains("plantuml.com", StringComparison.OrdinalIgnoreCase))
+                e.Response = core.Environment!.CreateWebResourceResponse(null, 403, "Blocked", "");
+        };
+
         var s = core.Settings;
         s.AreDevToolsEnabled = false;
         s.IsStatusBarEnabled = false;

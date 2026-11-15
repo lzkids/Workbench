@@ -1,0 +1,18 @@
+// ../../marktext/node_modules/.pnpm/prismjs@1.30.0/node_modules/prismjs/components/prism-ejs.js
+(function(e) {
+	e.languages.ejs = {
+		delimiter: {
+			pattern: /^<%[-_=]?|[-_]?%>$/,
+			alias: "punctuation"
+		},
+		comment: /^#[\s\S]*/,
+		"language-javascript": {
+			pattern: /[\s\S]+/,
+			inside: e.languages.javascript
+		}
+	}, e.hooks.add("before-tokenize", function(t) {
+		e.languages["markup-templating"].buildPlaceholders(t, "ejs", /<%(?!%)[\s\S]+?%>/g);
+	}), e.hooks.add("after-tokenize", function(t) {
+		e.languages["markup-templating"].tokenizePlaceholders(t, "ejs");
+	}), e.languages.eta = e.languages.ejs;
+})(Prism);

@@ -366,7 +366,14 @@ public partial class IslandWindow : Window
     {
         if (on == _enlarged) return;
         _enlarged = on;
-        var anim = new DoubleAnimation(on ? EnlargeScale : 1, TimeSpan.FromMilliseconds(140))
+        // 悬停放大的溢出约束:渲染变换超出窗口透明边距(MarginX/Y)的部分会被窗口边界裁掉。
+        // 宽胶囊(底边横排展开态 ~600px)按满额 1.18x 时每侧溢出 ~54px > 28px 边距 = 裁剪;
+        // 按当前胶囊实际尺寸把倍率压回边距内(每侧留 6px 安全余量),小胶囊仍取满 1.18x。
+        var cap = Math.Min(
+            1 + 2 * (MarginX - 6) / Math.Max(Pill.ActualWidth, 1),
+            1 + 2 * (MarginY - 6) / Math.Max(Pill.ActualHeight, 1));
+        var target = Math.Min(EnlargeScale, Math.Max(1, cap));
+        var anim = new DoubleAnimation(on ? target : 1, TimeSpan.FromMilliseconds(140))
         {
             EasingFunction = on
                 ? new BackEase { Amplitude = 0.2, EasingMode = EasingMode.EaseOut }

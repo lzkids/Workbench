@@ -70,6 +70,7 @@ public partial class StickyWindow : Window
                         bg = c.Background,
                         fg = c.Foreground,
                         accent = c.Accent,
+                        font = EditorFont(),
                     }));
                     break;
 
@@ -116,13 +117,18 @@ public partial class StickyWindow : Window
             Editor.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new { type = "content", value = note.Content ?? "" }));
     }
 
-    private static bool IsAppDark() => string.Equals(App.Data.Theme, "Dark", StringComparison.OrdinalIgnoreCase);
+    private static bool IsAppDark() => App.Data.Theme is "Dark" or "Pixel";
 
-    // App 深浅主题切换时由 MainWindow 推送:Vditor 重建换肤,内容从 JS 侧 cur 恢复
+    // 像素风时编辑器用缝合像素字体(空=默认);便签卡片色仍随用户自选
+    private static string? EditorFont() => App.Data.Theme == "Pixel"
+        ? "'Fusion Pixel 12px Prop zh-Hans', 'Microsoft YaHei', monospace"
+        : null;
+
+    // App 深浅主题切换时由 MainWindow 推送:Muya 实时换肤(字体/配色随消息更新)
     public void OnAppThemeChanged()
     {
         if (_mdReady)
-            Editor.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new { type = "theme", dark = IsAppDark() }));
+            Editor.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new { type = "theme", dark = IsAppDark(), font = EditorFont() }));
     }
 
     private void Border_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -148,6 +154,7 @@ public partial class StickyWindow : Window
                     bg = c.Background,
                     fg = c.Foreground,
                     accent = c.Accent,
+                    font = EditorFont(),
                 }));
             }
         }

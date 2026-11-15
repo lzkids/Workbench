@@ -36,6 +36,9 @@ public static class CloudSync
     private static string DbPath => Path.Combine(App.DataDir, "workbench.db");
     private static string PendingRestorePath => Path.Combine(App.DataDir, "restore-pending.json");
 
+    // run-5 审计修复:恢复暂存未消费时为 true(退出推送必须跳过,否则恢复被回滚)
+    public static bool HasPendingRestore => File.Exists(PendingRestorePath);
+
     // 远端固定子目录:root(如 https://dav.jianguoyun.com/dav/) + Workbench/workbench.db
     private const string RemoteDirName = "Workbench";
     private const string RemoteFileName = "workbench.db";

@@ -64,6 +64,10 @@ public partial class App : Application
                 .WaitAsync(TimeSpan.FromSeconds(8)).GetAwaiter().GetResult();
             cloudNote = pull.Note;
             Trace("cloud startup pull: " + pull.Outcome + (pull.Note is null ? "" : " | " + pull.Note));
+            if (pull.Outcome == CloudSync.StartupPullOutcome.Pulled)
+                Toast.Show("已从云端拉取最新数据", "☁️");
+            else if (pull.Outcome == CloudSync.StartupPullOutcome.Conflict)
+                Toast.Show("云端与本地都有改动,未自动覆盖——请到「设置 → 云同步」处理", "⚠️");
         }
         catch (Exception ex)
         {
@@ -74,10 +78,10 @@ public partial class App : Application
         Trace("data loaded");
         base.OnStartup(e);
 
-        if (Data.Theme == "Dark")
+        if (Data.Theme is not (null or "Light"))
         {
-            ApplyTheme("Dark");
-            Trace("dark theme applied at startup");
+            ApplyTheme(Data.Theme);
+            Trace($"{Data.Theme.ToLowerInvariant()} theme applied at startup");
         }
 
         HookAutoSave(Data);
@@ -171,6 +175,7 @@ public partial class App : Application
 
         if (e.Args.Contains("selftest"))
         {
+            QuietMode = true; // 自测期间不弹轻提示(删除/归档的 Toast 会污染自动化验证)
             Trace("selftest branch reached");
             RunSelfTest();
         }
@@ -209,16 +214,24 @@ public partial class App : Application
     // 恢复/改数据目录等场景:请求在 OnExit 释放单实例 Mutex 之后再拉起新实例(run-3 加固)
     public static void RequestRestart() => _restartAfterExit = true;
 
+    // 自测/自动化验证期间的静默开关:业务反馈类 Toast 全部跳过
+    public static bool QuietMode;
+
     // 保存失败一次性可见告警(审计修复):写库异常原被静默吞掉,防抖窗口内的更改丢失无任何信号
     public static void NotifySaveFailure(Exception ex)
     {
         WriteCrashLog(ex);
-        if (_saveFailureNotified) return;
+        if (_saveFailureNotified)
+        {
+            // 首次之后不再弹窗阻断,但每次失败都给轻提示(避免"继续失败完全无信号")
+            try { Toast.Show("数据保存失败,更改尚未写入磁盘(详情见日志)", "⚠️"); } catch { }
+            return;
+        }
         _saveFailureNotified = true;
         try
         {
             System.Windows.MessageBox.Show("数据保存失败——本次的更改还在界面上,但尚未写入磁盘。\n\n" +
-                ex.Message + "\n\n(再次失败将不再提示,详情见日志)", "工作台",
+                ex.Message + "\n\n(后续失败将以轻提示告知,详情见日志)", "工作台",
                 System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
         }
         catch { /* 通知本身失败不再放大问题 */ }
@@ -665,22 +678,108 @@ public partial class App : Application
     }
 
     // ===== 归档流转 =====
+
+    // 统一的 MD 文档创建入口(编辑窗侧栏/主页/灵动岛三处共用):根文档插顶,子文档插到父的子块末尾(兄弟按创建序)
+    public static MdDoc AddMdDoc(string? parentId = null)
+    {
+        var doc = new MdDoc { ParentId = parentId };
+        if (string.IsNullOrEmpty(parentId))
+        {
+            Data.MdDocs.Insert(0, doc);
+        }
+        else
+        {
+            var idx = 0; // 兜底:父不在集合(异常数据)时插顶
+            for (var i = 0; i < Data.MdDocs.Count; i++)
+                if (Data.MdDocs[i].ParentId == parentId)
+                    idx = i + 1;
+            Data.MdDocs.Insert(idx, doc);
+        }
+        Persist();
+        return doc;
+    }
+
+    // 某文档的全部后代(树状删除/归档级联用;ParentId 指向缺失父的孤儿不在此列)
+    private static List<MdDoc> MdDescendants(MdDoc root)
+    {
+        // run-5 审计加固:补 seen 防环(与渲染层 MdTreeRows/BuildNodes 同口径)——外部写库构造
+        // ParentId 环时无守卫会 UI 线程死循环+无界内存
+        var result = new List<MdDoc>();
+        var seen = new HashSet<string> { root.Id };
+        var frontier = new List<MdDoc> { root };
+        while (frontier.Count > 0)
+        {
+            var ids = frontier.Select(d => d.Id).ToHashSet();
+            frontier = Data.MdDocs.Where(d => d.ParentId != null && ids.Contains(d.ParentId) && seen.Add(d.Id)).ToList();
+            result.AddRange(frontier);
+        }
+        return result;
+    }
+
+    // MD 文档树序平铺(DFS,父紧跟子树;跳过归档;孤儿落根,防环)——主页卡片列表与编辑窗侧栏共用同一语义
+    public static List<(MdDoc Doc, int Depth)> MdTreeRows()
+    {
+        var rows = new List<(MdDoc Doc, int Depth)>();
+        var visible = Data.MdDocs.Where(d => !d.Archived).ToList();
+        var byParent = new Dictionary<string, List<MdDoc>>();
+        foreach (var d in visible)
+        {
+            var key = string.IsNullOrEmpty(d.ParentId) ? "" : d.ParentId;
+            if (!byParent.TryGetValue(key, out var list)) byParent[key] = list = new List<MdDoc>();
+            list.Add(d);
+        }
+
+        var seen = new HashSet<string>();
+        void Dfs(string parentId, int depth)
+        {
+            if (!byParent.TryGetValue(parentId, out var kids)) return;
+            foreach (var d in kids)
+            {
+                if (!seen.Add(d.Id)) continue; // 异常数据成环时不再展开
+                rows.Add((d, depth));
+                Dfs(d.Id, depth + 1);
+            }
+        }
+        Dfs("", 0);
+        foreach (var d in visible) // 孤儿落根(ParentId 无效或环上节点),数据不丢
+        {
+            if (seen.Contains(d.Id)) continue;
+            seen.Add(d.Id);
+            rows.Add((d, 0));
+            Dfs(d.Id, 1);
+        }
+        return rows;
+    }
+
     public static void MoveToArchive(object item)
     {
-        // 便签归档时同步关闭它的置顶小窗;MD 文档归档时同步关闭它的编辑窗
+        // 便签归档时同步关闭它的置顶小窗
         if (item is NoteItem archivedNote)
             CloseStickyFor(archivedNote);
         if (item is MdDoc archivedDoc)
-            CloseMdDocWindowsFor(archivedDoc);
+        {
+            // 树状文档:归档带整棵子树(父归档子不悬空);恢复仅恢复单条,子级保持归档等手动恢复
+            var docs = new[] { archivedDoc }.Concat(MdDescendants(archivedDoc)).ToList();
+            foreach (var doc in docs)
+            {
+                CloseMdDocWindowsFor(doc);
+                doc.Archived = true;
+                doc.ArchivedAt = DateTime.Now;
+            }
+            Persist();
+            if (!QuietMode)
+                Toast.Show(docs.Count > 1 ? $"已归档 {docs.Count} 条(含子文档)" : $"已归档「{archivedDoc.Title}」", "📦");
+            return;
+        }
 
         switch (item)
         {
             case NoteItem n: n.Archived = true; n.ArchivedAt = DateTime.Now; break;
             case TaskItem t: t.Archived = true; t.ArchivedAt = DateTime.Now; break;
             case TodoItem td: td.Archived = true; td.ArchivedAt = DateTime.Now; break;
-            case MdDoc m: m.Archived = true; m.ArchivedAt = DateTime.Now; break;
         }
         Persist();
+        if (!QuietMode) Toast.Show("已归档(可在归档页恢复)", "📦");
     }
 
     // 关闭某条便签的置顶小窗(删除/归档时调用,避免"卡片没了窗还在")
@@ -716,11 +815,31 @@ public partial class App : Application
     // ===== 回收站流转 =====
     public static void MoveToRecycle(string kind, object item)
     {
-        // 便签被删除时,同步关闭它的置顶小窗;MD 文档被删除时,同步关闭它的编辑窗(避免"条目没了窗还在")
+        // 便签被删除时,同步关闭它的置顶小窗(避免"条目没了窗还在")
         if (item is NoteItem deletedNote)
             CloseStickyFor(deletedNote);
         if (item is MdDoc deletedDoc)
-            CloseMdDocWindowsFor(deletedDoc);
+        {
+            // 树状文档:删除带整棵子树(父没了子不悬空),每条各自入回收站;恢复单条,孤儿落根显示
+            var docs = new[] { deletedDoc }.Concat(MdDescendants(deletedDoc)).ToList();
+            foreach (var doc in docs)
+            {
+                CloseMdDocWindowsFor(doc);
+                var docJson = JsonSerializer.Serialize(doc);
+                var t = string.IsNullOrWhiteSpace(doc.Title) ? "(无标题文档)" : doc.Title;
+                Data.RecycleBin.Insert(0, new RecycleItem
+                {
+                    Kind = "MdDoc",
+                    Title = t.Length > 40 ? t[..40] : t,
+                    PayloadJson = docJson,
+                });
+                Data.MdDocs.Remove(doc);
+            }
+            Persist();
+            if (!QuietMode)
+                Toast.Show(docs.Count > 1 ? $"已删除 {docs.Count} 条到回收站(含子文档)" : "已删除到回收站", "🗑️");
+            return;
+        }
 
         var json = JsonSerializer.Serialize(item);
         var title = item switch
@@ -728,7 +847,6 @@ public partial class App : Application
             NoteItem n => string.IsNullOrWhiteSpace(n.Content) ? "(空便签)" : n.Content,
             TaskItem t => t.Title,
             TodoItem td => td.Title,
-            MdDoc m => string.IsNullOrWhiteSpace(m.Title) ? "(无标题文档)" : m.Title,
             _ => "",
         };
         if (title.Length > 40) title = title[..40];
@@ -739,9 +857,9 @@ public partial class App : Application
             case NoteItem n: Data.Notes.Remove(n); break;
             case TaskItem t: Data.Tasks.Remove(t); break;
             case TodoItem td: Data.Todos.Remove(td); break;
-            case MdDoc m: Data.MdDocs.Remove(m); break;
         }
         Persist();
+        if (!QuietMode) Toast.Show("已删除到回收站(可恢复)", "🗑️");
     }
 
     public static void RestoreFromRecycle(RecycleItem r)
@@ -790,8 +908,13 @@ public partial class App : Application
     {
         SaveTimer.Stop();
         Persist(); // 退出前把防抖窗口里的最后改动落盘
-        try { CloudSync.PushOnExit(CloudSync.LoadConfig()); } // 退出自动上传(内部限时 12s,失败只记日志不拦退出)
-        catch (Exception ex) { Trace("cloud push on exit failed: " + ex.Message); }
+        // run-5 审计修复:恢复暂存期间禁用退出推送——否则恢复前内存态 L 会覆盖刚恢复的远端 R,
+        // 重启后自动拉取把 L 拉回本地,用户显式恢复被静默回滚
+        if (CloudSync.HasPendingRestore)
+            Trace("restore pending: skip push-on-exit");
+        else
+            try { CloudSync.PushOnExit(CloudSync.LoadConfig()); } // 退出自动上传(内部限时 12s,失败只记日志不拦退出)
+            catch (Exception ex) { Trace("cloud push on exit failed: " + ex.Message); }
         _singleInstance?.Dispose(); // 释放单实例守卫,允许下一次启动
         // run-3 加固:恢复/改数据目录请求的重启延迟到此——Mutex 已释放,新实例不会撞"已在运行中"
         if (_restartAfterExit)
@@ -869,10 +992,70 @@ public partial class App : Application
     // 运行时不刷新;只有官方 ApplicationThemeManager.Apply 会驱动全量刷新。
     // 之前怀疑它导致闪退,黑匣子证明它没崩过(那次弹窗是写文件失败)。
     // 关键:必须显式传 WindowBackdropType.None——默认的 Mica 才是 Win10 上的真正高危项。
+    // 主题注册表:皮肤主题名 → (Fluent 打底主题, 皮肤字典 pack URI)
+    private static readonly (string Theme, string Base, string Skin)[] SkinThemes =
+    {
+        ("Pixel", "Dark", "Themes/PixelSkin.xaml"),   // 像素风:复古绿,暗底
+        ("Swiss", "Light", "Themes/SwissSkin.xaml"),  // 瑞士现代主义:白黑红,亮底
+    };
+
+    private static string? SkinPathOf(string themeName) =>
+        SkinThemes.FirstOrDefault(t => t.Theme == themeName).Skin;
+
     public static void ApplyTheme(string themeName)
     {
-        var theme = Enum.Parse<ApplicationTheme>(themeName);
+        // 皮肤主题:对应 Fluent 主题打底,再叠皮肤字典;键覆写走 DynamicResource 实时刷新
+        var theme = Enum.TryParse<ApplicationTheme>(themeName, out var parsed)
+            ? parsed
+            : Enum.Parse<ApplicationTheme>(SkinThemes.FirstOrDefault(t => t.Theme == themeName).Base);
+
         ApplicationThemeManager.Apply(theme, WindowBackdropType.None, true);
+
+        var appRes = Application.Current.Resources;
+        var merged = appRes.MergedDictionaries;
+        // 移除全部皮肤字典(一次只允许一个皮肤)
+        foreach (var t in SkinThemes)
+        {
+            var skin = merged.FirstOrDefault(d => d.Source?.OriginalString?.EndsWith(t.Skin.Split('/').Last()) == true);
+            if (skin != null) merged.Remove(skin);
+        }
+
+        if (SkinPathOf(themeName) is string skinPath)
+        {
+            merged.Add(new ResourceDictionary { Source = new Uri($"pack://application:,,,/{skinPath}") });
+            // 皮肤主题一律直角(键定义在 App.xaml 主字典,直接覆值才能赢过主字典查找)
+            appRes["CardCornerRadius"] = new CornerRadius(0, 0, 0, 0);
+            appRes["SmallCornerRadius"] = new CornerRadius(0, 0, 0, 0);
+            appRes["SidebarCornerRadius"] = new CornerRadius(0, 0, 0, 0);
+            appRes["IslandCornerRadius"] = new CornerRadius(0, 0, 0, 0);
+            appRes["AppFontFamily"] = themeName == "Pixel"
+                ? new System.Windows.Media.FontFamily(
+                    new Uri(AppContext.BaseDirectory), "Fonts/#Fusion Pixel 12px Prop zh-Hans") // 缝合像素(OFL),Content 散文件文件基 URI 加载
+                : new System.Windows.Media.FontFamily("Segoe UI, Microsoft YaHei UI"); // Swiss=Helvetica 感的系统字
+        }
+        else
+        {
+            // 亮/暗:移除皮肤专属设置(字体键移除=回退 WPF-UI 继承默认),圆角键恢复 App.xaml 初始值
+            if (appRes.Contains("AppFontFamily")) appRes.Remove("AppFontFamily");
+            appRes["CardCornerRadius"] = new CornerRadius(8, 8, 8, 8);
+            appRes["SmallCornerRadius"] = new CornerRadius(4, 4, 4, 4);
+            appRes["SidebarCornerRadius"] = new CornerRadius(8, 0, 0, 8);
+            appRes["IslandCornerRadius"] = new CornerRadius(24, 24, 24, 24);
+        }
+    }
+
+    // 统一的主题应用入口:换主题+落库+推送编辑窗(侧栏按钮与设置页共用,保证行为一致)
+    public static void ApplyAndPushTheme(string next)
+    {
+        ApplyTheme(next);
+        Data.Theme = next;
+        Persist();
+        foreach (var w in Application.Current.Windows.OfType<StickyWindow>())
+            w.OnAppThemeChanged();
+        foreach (var w in Application.Current.Windows.OfType<MdDocWindow>())
+            w.OnAppThemeChanged();
+        if (Application.Current.MainWindow is MainWindow m)
+            m.UpdateThemeButton(); // 侧栏按钮图标随目标态刷新
     }
 
     // 黑匣子:异常写 %APPDATA%\Workbench\crash.log,供排查

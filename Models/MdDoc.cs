@@ -6,6 +6,10 @@ public class MdDoc : ObservableObject
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
 
+    // 父文档 Id(树状结构,可建子文档):null/空=根;指向不存在的父时按根渲染(孤儿落根,数据不丢)
+    private string? _parentId;
+    public string? ParentId { get => _parentId; set => SetProperty(ref _parentId, value); }
+
     private string _content = "";
     public string Content { get => _content; set => SetProperty(ref _content, value); }
 

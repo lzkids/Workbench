@@ -9,7 +9,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>0.0.8</Version>
+    <Version>0.0.9</Version>
     <RootNamespace>Workbench</RootNamespace>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
@@ -25,8 +25,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- md 编辑器离线资产(Vditor 精简 dist + 胶水页):整体拷贝到输出/发布目录 -->
+    <!-- md 编辑器离线资产(Muya bundle + 胶水页):整体拷贝到输出/发布目录 -->
     <None Include="MdEditor\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <!-- 像素风主题:缝合像素字体(OFL 开源,本地散文件随发布走) -->
+    <Content Include="Fonts\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

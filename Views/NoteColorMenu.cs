@@ -16,6 +16,7 @@ public static class NoteColorMenu
             PlacementTarget = anchor,
             Placement = PlacementMode.Bottom,
         };
+        menu.SetResourceReference(System.Windows.Controls.Control.FontFamilyProperty, "AppFontFamily"); // 像素风字体跟主题
 
         foreach (var color in NoteColors.All)
         {
@@ -28,12 +29,12 @@ public static class NoteColorMenu
                 {
                     Width = 14,
                     Height = 14,
-                    CornerRadius = new CornerRadius(4),
                     Background = Brush(color.Background),
                     BorderBrush = Brush(color.Border),
                     BorderThickness = new Thickness(1),
                 },
             };
+            ((Border)item.Icon!).SetResourceReference(Border.CornerRadiusProperty, "SmallCornerRadius"); // 像素风直角
             item.Click += (_, _) =>
             {
                 note.ColorKey = color.Key;

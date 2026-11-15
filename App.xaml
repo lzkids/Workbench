@@ -13,6 +13,14 @@
             <!-- 用户偏好:所有输入框方角(覆盖 WPF UI 的圆角资源,双键保险) -->
             <CornerRadius x:Key="ControlCornerRadius">0,0,0,0</CornerRadius>
             <CornerRadius x:Key="TextBoxControlCornerRadius">0,0,0,0</CornerRadius>
+
+            <!-- 圆角资源键:默认值=现行字面量,像素皮肤(PixelSkin.xaml)覆写为 0;
+                 各 XAML 的圆角字面量已改为 DynamicResource 引用这些键 -->
+            <CornerRadius x:Key="CardCornerRadius">8,8,8,8</CornerRadius>
+            <CornerRadius x:Key="SmallCornerRadius">4,4,4,4</CornerRadius>
+            <CornerRadius x:Key="SidebarCornerRadius">8,0,0,8</CornerRadius>
+            <CornerRadius x:Key="IslandCornerRadius">24,24,24,24</CornerRadius>
+            <!-- 像素风字体:键默认不设(亮/暗走 WPF-UI 继承默认),ApplyTheme("Pixel") 时设为缝合像素并压平圆角键 -->
         </ResourceDictionary>
     </Application.Resources>
 </Application>

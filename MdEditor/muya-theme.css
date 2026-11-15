@@ -1,0 +1,102 @@
+/*
+ * 像素风字体(缝合像素,OFL 开源):家族名与宿主下发的 font 字段一致。
+ * 文件经 fonts.local 虚拟域名映射(仅 Fonts 子目录),与 WPF 侧共用同一份。
+ */
+@font-face {
+    font-family: 'Fusion Pixel 12px Prop zh-Hans';
+    src: url('https://fonts.local/fusion-pixel-zh_hans.ttf') format('truetype');
+    font-display: swap;
+}
+
+/*
+ * Muya ↔ Workbench 桥接主题层:把宿主注入的三色变量(--nb 底 / --nfg 字 / --nac 强调)映射进
+ * Muya 的 kebab-case CSS 变量。浅深两种模式共用一套映射(颜色由宿主按窗口/卡片/主题下发),
+ * html.dark 只补 Prism 代码高亮的深色 token。底色恒透明:真正的底由 WPF 窗口或便签卡片提供。
+ */
+
+:root {
+    --editor-bg-color: transparent;
+    --editor-color: var(--nfg);
+    --editor-color-80: var(--nfg);
+    --editor-color-50: color-mix(in srgb, var(--nfg) 72%, transparent);
+    --editor-color-30: color-mix(in srgb, var(--nfg) 45%, transparent);
+    --editor-color-10: color-mix(in srgb, var(--nfg) 18%, transparent);
+    --editor-color-04: color-mix(in srgb, var(--nfg) 8%, transparent);
+
+    --theme-color: var(--nac);
+    --highlight-color: color-mix(in srgb, var(--nac) 40%, transparent);
+    --selection-color: color-mix(in srgb, var(--nac) 32%, transparent);
+    --link-color: var(--nac);
+    --icon-color: var(--nac);
+
+    --code-block-color: var(--nfg);
+    --code-block-bg-color: color-mix(in srgb, var(--nfg) 7%, transparent);
+    --table-border-color: color-mix(in srgb, var(--nfg) 22%, transparent);
+    --input-bg-color: color-mix(in srgb, var(--nfg) 8%, transparent);
+
+    --blockquote-text-color: var(--editor-color-50);
+    --blockquote-border-color: color-mix(in srgb, var(--nac) 55%, transparent);
+    --hr-color: color-mix(in srgb, var(--nfg) 16%, transparent);
+    --list-marker-color: color-mix(in srgb, var(--nac) 70%, transparent);
+    --delete-color: color-mix(in srgb, #ff6969 80%, var(--nfg));
+
+    /* 悬浮层(格式条/段落菜单等):底色跟窗口/卡片色,深浅通用 */
+    --float-bg-color: var(--nb);
+    --float-hover-color: color-mix(in srgb, var(--nfg) 9%, transparent);
+    --float-border-color: color-mix(in srgb, var(--nfg) 14%, transparent);
+
+    /* MD 文档窗居中列(Typora 感);便签小窗由 body.no-toolbar 放开为全宽 */
+    --editor-area-width: 800px;
+}
+
+/* 底透明硬需求:窗口/卡片供底,WebView2 DefaultBackgroundColor 透明 */
+.mu-editor,
+.mu-editor .mu-content,
+.mu-container { background: transparent; }
+
+/* 便签小窗(纯打字面):窄卡片里去掉左右大留白 */
+body.no-toolbar { --editor-area-width: 100%; }
+body.no-toolbar .mu-container { padding: 10px 14px 40px 14px; }
+
+/* ===== Prism 深色 token(浅色主题已在 muya/style.css 内置;配色取 MarkText 一系深色主题的常见值) ===== */
+html.dark { color-scheme: dark; }
+
+html.dark .token.comment,
+html.dark .token.prolog,
+html.dark .token.doctype,
+html.dark .token.cdata { color: #7f848e; }
+
+html.dark .token.punctuation { color: #c0c4cc; }
+
+html.dark .namespace { opacity: 0.7; }
+
+html.dark .token.property,
+html.dark .token.tag,
+html.dark .token.boolean,
+html.dark .token.number,
+html.dark .token.constant,
+html.dark .token.symbol { color: #f97583; }
+
+html.dark .token.selector,
+html.dark .token.attr-name,
+html.dark .token.string,
+html.dark .token.char,
+html.dark .token.builtin { color: #9ecbff; }
+
+html.dark .token.operator,
+html.dark .token.entity,
+html.dark .token.url { color: #d19a66; }
+
+html.dark .token.atrule,
+html.dark .token.attr-value,
+html.dark .token.keyword { color: #c678dd; }
+
+html.dark .token.function,
+html.dark .token.class-name { color: #61afef; }
+
+html.dark .token.regex,
+html.dark .token.important,
+html.dark .token.variable { color: #e06c75; }
+
+html.dark .token.important,
+html.dark .token.bold { font-weight: bold; }

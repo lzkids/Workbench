@@ -90,7 +90,7 @@ public class SqliteStore : IDataStore
 
         using (var cmd = conn.CreateCommand())
         {
-            cmd.CommandText = "SELECT id, title, content, created_at, archived, archived_at FROM md";
+            cmd.CommandText = "SELECT id, title, content, created_at, archived, archived_at, parent_id FROM md";
             using var r = cmd.ExecuteReader();
             while (r.Read())
                 try
@@ -103,6 +103,7 @@ public class SqliteStore : IDataStore
                         CreatedAt = GetDate(r, 3),
                         Archived = !r.IsDBNull(4) && r.GetInt64(4) != 0,
                         ArchivedAt = r.IsDBNull(5) ? null : GetDate(r, 5),
+                        ParentId = r.IsDBNull(6) ? null : r.GetString(6),
                     });
                 }
                 catch (Exception ex)
@@ -205,7 +206,7 @@ public class SqliteStore : IDataStore
             cmd.CommandText = "SELECT value FROM meta WHERE key = 'theme'";
             var v = cmd.ExecuteScalar() as string;
             // 审计加固:theme 白名单化,库里的垃圾值不再进入 ApplyTheme 的 Enum.Parse 路径
-            if (v == "Dark" || v == "Light")
+            if (v == "Dark" || v == "Light" || v == "Pixel" || v == "Swiss")
                 data.Theme = v;
         }
 
@@ -289,12 +290,13 @@ public class SqliteStore : IDataStore
             Exec(conn, tx, "DELETE FROM md");
             foreach (var m in d.MdDocs)
                 Exec(conn, tx,
-                    "INSERT OR REPLACE INTO md(id, title, content, created_at, archived, archived_at) " +
-                    "VALUES($id, $title, $content, $created, $archived, $archived_at)",
+                    "INSERT OR REPLACE INTO md(id, title, content, created_at, archived, archived_at, parent_id) " +
+                    "VALUES($id, $title, $content, $created, $archived, $archived_at, $parent_id)",
                     ("$id", m.Id), ("$title", m.Title), ("$content", m.Content),
                     ("$created", Fmt(m.CreatedAt)),
                     ("$archived", m.Archived ? 1L : 0L),
-                    ("$archived_at", m.ArchivedAt.HasValue ? Fmt(m.ArchivedAt.Value) : null));
+                    ("$archived_at", m.ArchivedAt.HasValue ? Fmt(m.ArchivedAt.Value) : null),
+                    ("$parent_id", m.ParentId));
 
             Exec(conn, tx, "DELETE FROM recycle");
             foreach (var r in d.RecycleBin)
@@ -348,7 +350,7 @@ public class SqliteStore : IDataStore
                 id TEXT PRIMARY KEY, kind TEXT, title TEXT, payload TEXT, deleted_at TEXT);
             CREATE TABLE IF NOT EXISTS md(
                 id TEXT PRIMARY KEY, title TEXT, content TEXT, created_at TEXT,
-                archived INTEGER, archived_at TEXT);
+                archived INTEGER, archived_at TEXT, parent_id TEXT);
             CREATE TABLE IF NOT EXISTS meta(
                 key TEXT PRIMARY KEY, value TEXT);
             """);
@@ -371,6 +373,7 @@ public class SqliteStore : IDataStore
         // run-4 审计加固:md 表补列升级路径与 notes/tasks/todos 同构(防外部产生的遗留 schema 使 Load 中止)
         EnsureColumn(conn, "md", "archived", "INTEGER");
         EnsureColumn(conn, "md", "archived_at", "TEXT");
+        EnsureColumn(conn, "md", "parent_id", "TEXT"); // v0.0.9 树状子文档
     }
 
     private static void EnsureColumn(SqliteConnection conn, string table, string column, string ddlType)

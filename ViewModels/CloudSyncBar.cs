@@ -67,12 +67,14 @@ public class CloudSyncBar : ObservableObject
         if (cloud is null) return;
         if (!Dialog.Confirm("从云端同步",
                 (HttpWarning(cloud).Length > 0 ? HttpWarning(cloud) + "\n\n" : "") +
-                "将用云端数据覆盖本地数据(便签/任务/待办以云端为准)。\n\n当前本地数据会先备份到云端 workbench.db.bak,恢复错了还能找回。\n恢复在重启应用后生效。继续?"))
+                "将用云端数据覆盖本地数据库(便签/任务/待办/MD 文档以云端为准)。\n\n当前本地数据会先备份到云端 workbench.db.bak,恢复错了还能找回。\n恢复在重启应用后生效。继续?"))
             return;
         CloudIdle = false;
         try
         {
             await CloudSync.RestoreNowAsync(cloud);
+            Toast.Show("同步成功,正在重启应用…", "☁️");
+            await Task.Delay(1000); // 让成功提示停留一瞬(原先立即关窗,提示来不及显示)
             // 与设置页同一路径:请求重启,OnExit 释放 Mutex 后再拉起新实例(旧实例退出推送最长占 12s)
             App.RequestRestart();
             Application.Current.Shutdown();

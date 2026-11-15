@@ -57,6 +57,7 @@ public static class Toast
             ShowInTaskbar = false;
             ShowActivated = false;
             Focusable = false;
+            SetResourceReference(System.Windows.Controls.Control.FontFamilyProperty, "AppFontFamily"); // 像素风字体跟主题
             SizeToContent = SizeToContent.WidthAndHeight;
             WindowStartupLocation = WindowStartupLocation.Manual;
             MaxWidth = MaxWidth + 2 * PadX; // 含外边距的窗口上限,正文被 MaxWidth 限制换行
@@ -98,7 +99,6 @@ public static class Toast
 
             var border = new Border
             {
-                CornerRadius = new CornerRadius(14),
                 BorderThickness = new Thickness(1),
                 Padding = new Thickness(18, 10, 18, 10),
                 Child = row,
@@ -108,6 +108,7 @@ public static class Toast
                     BlurRadius = 18, ShadowDepth = 1.5, Direction = 270, Opacity = 0.28,
                 },
             };
+            border.SetResourceReference(Border.CornerRadiusProperty, "CardCornerRadius"); // 像素风直角
             border.SetResourceReference(Border.BackgroundProperty, "SolidBackgroundFillColorSecondaryBrush");
             border.SetResourceReference(Border.BorderBrushProperty, "DividerStrokeColorDefaultBrush");
             text.SetResourceReference(TextBlock.ForegroundProperty, "TextFillColorPrimaryBrush");

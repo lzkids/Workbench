@@ -250,22 +250,15 @@ public partial class MainWindow : FluentWindow
     // 深浅色切换:防御式——失败弹提示、真正回滚,绝不闪退也不留"半应用"状态
     public void ToggleTheme()
     {
+        // 侧栏按钮只管深浅二态(像素/瑞士在设置页选);皮肤态点击=回到各自打底的深浅域(像素暗底→暗,瑞士亮底→亮)
         var previous = App.Data.Theme;
         try
         {
-            var next = previous == "Dark" ? "Light" : "Dark";
+            var next = previous switch { "Dark" => "Light", "Swiss" => "Light", _ => "Dark" };
             App.Trace($"toggle {previous} -> {next}: begin");
-            App.ApplyTheme(next);
+            App.ApplyAndPushTheme(next); // 应用+落库+推送编辑窗
             App.Trace("toggle: apply ok");
-            App.Data.Theme = next;
-            App.Persist();
-            App.Trace("toggle: persist ok");
             UpdateThemeButton();
-            // 推给已打开的 md 编辑器小窗(Vditor 重建换肤,内容保留;MD 文档窗连配色一起换)
-            foreach (var w in Application.Current.Windows.OfType<StickyWindow>())
-                w.OnAppThemeChanged();
-            foreach (var w in Application.Current.Windows.OfType<MdDocWindow>())
-                w.OnAppThemeChanged();
         }
         catch (Exception ex)
         {
@@ -281,10 +274,11 @@ public partial class MainWindow : FluentWindow
     private void ThemeToggle_Click(object sender, RoutedEventArgs e) => ToggleTheme();
 
     // 底部按钮已改 SymbolIcon-only:图标和悬停提示都显示"要切到"的目标模式
-    private void UpdateThemeButton()
+    public void UpdateThemeButton()
     {
+        // 图标和悬停提示都显示"要切到"的目标模式:亮→月,其余(暗/像素/瑞士)→太阳(点击回亮色)
         bool dark = App.Data.Theme == "Dark";
         ThemeSymbol.Symbol = dark ? SymbolRegular.WeatherSunny24 : SymbolRegular.WeatherMoon24;
-        ThemeToggle.ToolTip = dark ? "浅色模式" : "深色模式";
+        ThemeToggle.ToolTip = dark ? "浅色模式" : "深色模式(像素/瑞士主题在设置页选)";
     }
 }

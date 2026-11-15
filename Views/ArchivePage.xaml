@@ -11,7 +11,7 @@
                     <ui:Button Command="{Binding Cloud.CloudPushCommand}"
                                Content="☁️ 上传"
                                IsEnabled="{Binding Cloud.CloudIdle}"
-                               ToolTip="把本地数据上传到云端备份(便签/任务/待办一起)"/>
+                               ToolTip="把本地数据上传到云端备份(便签/任务/待办/MD 文档一起)"/>
                     <ui:Button Command="{Binding Cloud.CloudSyncCommand}"
                                Content="⬇ 同步"
                                IsEnabled="{Binding Cloud.CloudIdle}"

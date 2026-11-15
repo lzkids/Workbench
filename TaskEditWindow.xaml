@@ -1,9 +1,10 @@
 <ui:FluentWindow x:Class="Workbench.TaskEditWindow"
+        FontFamily="{DynamicResource AppFontFamily}"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         Title="编辑任务" Width="460" SizeToContent="Height"
-        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
         ExtendsContentIntoTitleBar="True">
 
     <Grid>

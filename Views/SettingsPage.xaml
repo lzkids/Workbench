@@ -31,6 +31,35 @@
                 </Grid>
             </ui:Card>
 
+            <!-- 主题 -->
+            <TextBlock Text="主题" FontSize="15" FontWeight="Bold" Margin="0,0,0,10"
+                       Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+            <ui:Card Padding="14,12" Margin="0,0,0,20">
+                <StackPanel>
+                    <TextBlock Text="像素风=复古绿+像素字体+直角;瑞士现代=白底黑字+红强调。侧栏底部按钮保留深浅快捷切换"
+                               FontSize="11.5" Margin="0,0,0,10"
+                               Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
+                    <StackPanel Orientation="Horizontal">
+                        <RadioButton Content="☀️ 浅色" GroupName="theme" Margin="0,0,14,0" Cursor="Hand"
+                                     IsChecked="{Binding IsThemeLight, Mode=OneWay}"
+                                     Command="{Binding SetThemeCommand}" CommandParameter="Light"
+                                     Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+                        <RadioButton Content="🌙 深色" GroupName="theme" Margin="0,0,14,0" Cursor="Hand"
+                                     IsChecked="{Binding IsThemeDark, Mode=OneWay}"
+                                     Command="{Binding SetThemeCommand}" CommandParameter="Dark"
+                                     Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+                        <RadioButton Content="🎮 像素风" GroupName="theme" Margin="0,0,14,0" Cursor="Hand"
+                                     IsChecked="{Binding IsThemePixel, Mode=OneWay}"
+                                     Command="{Binding SetThemeCommand}" CommandParameter="Pixel"
+                                     Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+                        <RadioButton Content="▦ 瑞士现代" GroupName="theme" Cursor="Hand"
+                                     IsChecked="{Binding IsThemeSwiss, Mode=OneWay}"
+                                     Command="{Binding SetThemeCommand}" CommandParameter="Swiss"
+                                     Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+                    </StackPanel>
+                </StackPanel>
+            </ui:Card>
+
             <!-- 关闭行为 -->
             <TextBlock Text="关闭行为" FontSize="15" FontWeight="Bold" Margin="0,0,0,10"
                        Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
@@ -96,7 +125,7 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border Margin="0,0,8,8" CornerRadius="12" Padding="10,4"
+                                <Border Margin="0,0,8,8" CornerRadius="{DynamicResource CardCornerRadius}" Padding="10,4"
                                         Background="{Binding Path=., Converter={StaticResource TagBg}}">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="{Binding}" FontSize="12"
@@ -143,7 +172,7 @@
             </ui:Card>
 
             <!-- 云同步 (WebDAV):命名容器供岛底 ☁️ 按钮滚动定位 + 短暂高亮 -->
-            <Border x:Name="CloudSection" BorderThickness="1" BorderBrush="Transparent" CornerRadius="6">
+            <Border x:Name="CloudSection" BorderThickness="1" BorderBrush="Transparent" CornerRadius="{DynamicResource SmallCornerRadius}">
             <StackPanel>
             <TextBlock Text="云同步 (WebDAV)" FontSize="15" FontWeight="Bold" Margin="0,0,0,10"
                        Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
@@ -157,7 +186,7 @@
                         <StackPanel>
                             <TextBlock Text="启用云同步" FontSize="14"
                                        Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
-                            <TextBlock Text="只同步主数据库(便签/任务/待办);退出自动上传,启动时云端有更新自动拉取。凭据与加密口令明文存本机 Data\webdav.json——口令保护的是云端内容,不是这个文件" FontSize="11.5" Margin="0,2,0,0" TextWrapping="Wrap"
+                            <TextBlock Text="整库快照同步(便签/任务/待办/MD 文档都在内);退出自动上传,启动时云端有更新自动拉取。凭据与加密口令明文存本机 Data\webdav.json——口令保护的是云端内容,不是这个文件" FontSize="11.5" Margin="0,2,0,0" TextWrapping="Wrap"
                                        Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
                         </StackPanel>
                         <ui:ToggleSwitch Grid.Column="1" IsChecked="{Binding CloudEnabled}"

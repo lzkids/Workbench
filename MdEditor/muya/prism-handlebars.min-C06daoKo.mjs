@@ -1,0 +1,31 @@
+// ../../marktext/node_modules/.pnpm/prismjs@1.30.0/node_modules/prismjs/components/prism-handlebars.min.js
+(function(e) {
+	e.languages.handlebars = {
+		comment: /\{\{![\s\S]*?\}\}/,
+		delimiter: {
+			pattern: /^\{\{\{?|\}\}\}?$/,
+			alias: "punctuation"
+		},
+		string: /(["'])(?:\\.|(?!\1)[^\\\r\n])*\1/,
+		number: /\b0x[\dA-Fa-f]+\b|(?:\b\d+(?:\.\d*)?|\B\.\d+)(?:[Ee][+-]?\d+)?/,
+		boolean: /\b(?:false|true)\b/,
+		block: {
+			pattern: /^(\s*(?:~\s*)?)[#\/]\S+?(?=\s*(?:~\s*)?$|\s)/,
+			lookbehind: !0,
+			alias: "keyword"
+		},
+		brackets: {
+			pattern: /\[[^\]]+\]/,
+			inside: {
+				punctuation: /\[|\]/,
+				variable: /[\s\S]+/
+			}
+		},
+		punctuation: /[!"#%&':()*+,.\/;<=>@\[\\\]^`{|}~]/,
+		variable: /[^!"#%&'()*+,\/;<=>@\[\\\]^`{|}~\s]+/
+	}, e.hooks.add("before-tokenize", (function(t) {
+		e.languages["markup-templating"].buildPlaceholders(t, "handlebars", /\{\{\{[\s\S]+?\}\}\}|\{\{[\s\S]+?\}\}/g);
+	})), e.hooks.add("after-tokenize", (function(t) {
+		e.languages["markup-templating"].tokenizePlaceholders(t, "handlebars");
+	})), e.languages.hbs = e.languages.handlebars, e.languages.mustache = e.languages.handlebars;
+})(Prism);

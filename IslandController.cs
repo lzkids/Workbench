@@ -227,6 +227,7 @@ public class IslandController
                 {
                     App.Data.Tasks.Insert(0, task);
                     App.Persist();
+                    Toast.Show("任务已保存", "🗂️");
                 }
                 break;
             }
@@ -237,15 +238,14 @@ public class IslandController
                 {
                     App.Data.Todos.Insert(0, win.Result);
                     App.Persist();
+                    Toast.Show("已添加待办", "✅");
                 }
                 break;
             }
             case "md":
             {
-                // MD 文档 = 直接开新文档编辑窗(与便签小窗同一套 WebView2 渲染管线)
-                var doc = new MdDoc();
-                App.Data.MdDocs.Insert(0, doc);
-                App.Persist();
+                // MD 文档 = 直接开新文档编辑窗(与便签小窗同一套 WebView2 渲染管线);创建走统一入口
+                var doc = App.AddMdDoc();
                 var win = new MdDocWindow(doc) { Owner = _island, Topmost = true };
                 win.Show();
                 break;

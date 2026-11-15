@@ -18,8 +18,15 @@ public partial class TasksPage : UserControl
         if (sender is FrameworkElement { DataContext: TaskItem task })
         {
             var win = new TaskEditWindow(task) { Owner = Window.GetWindow(this) };
-            win.ShowDialog();
-            App.Persist();
+            if (win.ShowDialog() == true)
+            {
+                App.Persist();
+                Toast.Show("任务已保存", "🗂️");
+            }
+            else
+            {
+                App.Persist();
+            }
         }
     }
 

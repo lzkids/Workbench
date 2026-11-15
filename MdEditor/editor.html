@@ -3,32 +3,24 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<!-- run-4 加固:CSP 兜底(禁外源脚本/限制外联;script-src 须含 unsafe-inline——Vditor 以 XHR+内联 script 注入
-     i18n 与图标,注入源仅为本地 dist;真正的桥/导航边界由宿主侧 e.Source 过滤+NavigationStarting 钉死承担) -->
+<!-- run-4 加固:CSP 兜底(禁外源脚本/限制外联;真正的桥/导航边界由宿主侧 e.Source 过滤+NavigationStarting 钉死承担) -->
+<!-- run-9:内核 Vditor → Muya(MarkText 同款 @muyajs/core);ES module 全部本地(虚拟域名根),CSP 不变 -->
 <meta http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' http: https: data:; font-src 'self'; connect-src 'self'">
+      content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data: https://fonts.local; connect-src 'self'">
 <title>md</title>
-<link rel="stylesheet" href="dist/index.css">
-<link id="ct" rel="stylesheet" href="dist/css/content-theme/light.css">
+<link rel="stylesheet" href="muya/style.css">
+<link rel="stylesheet" href="muya-theme.css">
 <style>
 :root { --nb:#FEF3A2; --nfg:#3D3617; --nac:#8A7B2E; }
 /* 底色透明:浅色/深色/便签卡片色全部由宿主(WPF 窗口或卡片)提供,
    WebView2 首绘前也不再发黑(默认底色同步在宿主侧设为透明) */
 html, body { margin:0; padding:0; height:100%; background: transparent; }
+/* getContainer 会替换传入的子节点,外层 #ed 只保高度与重建挂载点 */
 #ed { height:100%; }
-/* 便签色注入:编辑区文字/光标/链接色跟卡片配色走(卡片永远有色底,不随深浅主题) */
-.vditor { background: transparent !important; border: none !important; }
-.vditor-ir { background: transparent !important; }
-.vditor-reset { color: var(--nfg) !important; caret-color: var(--nac) !important; }
-.vditor-reset a { color: var(--nac) !important; }
-/* 工具栏按需显隐:MD 文档窗开常用语法栏,便签小窗保持纯打字面(body.no-toolbar 由 JS 控制) */
-.no-toolbar .vditor-toolbar { display: none !important; }
-.vditor-counter { display: none !important; }
 </style>
 </head>
 <body>
 <div id="ed"></div>
-<script src="dist/index.min.js"></script>
-<script src="editor.js"></script>
+<script type="module" src="editor.js"></script>
 </body>
 </html>

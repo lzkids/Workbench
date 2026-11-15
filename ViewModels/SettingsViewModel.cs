@@ -17,6 +17,23 @@ public class SettingsViewModel : ObservableObject
     public RelayCommand AddTagCommand { get; }
     public RelayCommand RemoveTagCommand { get; }
 
+    // ===== 主题 =====
+    public RelayCommand SetThemeCommand { get; }
+
+    // 四个单选按钮的选中态(Theme 变化后统一 OnPropertyChanged 刷新)
+    public bool IsThemeLight => App.Data.Theme == "Light";
+    public bool IsThemeDark => App.Data.Theme == "Dark";
+    public bool IsThemePixel => App.Data.Theme == "Pixel";
+    public bool IsThemeSwiss => App.Data.Theme == "Swiss";
+
+    private static string ThemeLabel(string t) => t switch
+    {
+        "Pixel" => "像素风",
+        "Swiss" => "瑞士现代",
+        "Dark" => "深色",
+        _ => "浅色",
+    };
+
     private bool _autoStart = AutoStart.IsEnabled();
     public bool AutoStartEnabled
     {
@@ -77,7 +94,7 @@ public class SettingsViewModel : ObservableObject
     public RelayCommand ExportHtmlCommand { get; }
     public RelayCommand ExportPdfCommand { get; }
 
-    // ===== 云同步(WebDAV):只同步主数据库 workbench.db;凭据存 Data\webdav.json =====
+    // ===== 云同步(WebDAV):整库快照同步 workbench.db(md 文档表含在内);凭据存 Data\webdav.json =====
     // run-3 加固:配置写盘防抖(每键入即写盘 → 800ms 静止后一次写),云命令执行前强制冲刷
     private readonly CloudSync.Config _cloud = CloudSync.LoadConfig();
     private bool _cloudBusy;
@@ -158,6 +175,24 @@ public class SettingsViewModel : ObservableObject
 
     public SettingsViewModel()
     {
+        SetThemeCommand = new RelayCommand(p =>
+        {
+            if (p is not string next || next == App.Data.Theme) return;
+            try
+            {
+                App.ApplyAndPushTheme(next);
+                OnPropertyChanged(nameof(IsThemeLight));
+                OnPropertyChanged(nameof(IsThemeDark));
+                OnPropertyChanged(nameof(IsThemePixel));
+                OnPropertyChanged(nameof(IsThemeSwiss));
+                Toast.Show($"已切换到{ThemeLabel(next)}主题", "🎨");
+            }
+            catch (Exception ex)
+            {
+                App.WriteCrashLog(ex);
+                Toast.Show("切换主题失败,详情见日志", "⚠️");
+            }
+        });
         ChangeDataDirCommand = new RelayCommand(_ => ChangeDataDir(useDefault: false));
         ResetDataDirCommand = new RelayCommand(_ => ChangeDataDir(useDefault: true));
         ChangeExportDirCommand = new RelayCommand(_ =>
@@ -370,7 +405,7 @@ public class SettingsViewModel : ObservableObject
         if (CloudBusy) return;
         if (!Dialog.Confirm("从云端恢复",
                 (HttpWarning.Length > 0 ? HttpWarning + "\n\n" : "") +
-                "将用云端数据覆盖本地数据库(便签/任务/待办以云端为准)。\n\n当前本地数据会先备份到云端 workbench.db.bak,恢复错了还能找回。\n恢复在重启应用后生效。继续?"))
+                "将用云端数据覆盖本地数据库(便签/任务/待办/MD 文档以云端为准)。\n\n当前本地数据会先备份到云端 workbench.db.bak,恢复错了还能找回。\n恢复在重启应用后生效。继续?"))
             return;
         CloudBusy = true;
         CloudStatus = "正在从云端拉取…";

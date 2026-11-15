@@ -1,12 +1,39 @@
 <ui:FluentWindow x:Class="Workbench.MdDocWindow"
+        FontFamily="{DynamicResource AppFontFamily}"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:models="clr-namespace:Workbench.Models"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         Title="Markdown" Width="860" Height="560" MinWidth="520" MinHeight="320"
         WindowStartupLocation="CenterScreen"
         ExtendsContentIntoTitleBar="True"
         Closed="Window_Closed">
+    <Window.Resources>
+        <!-- 树项样式:展开/选中与节点 VM 双向绑定,重建树后可恢复状态;定义在模板前(StaticResource 只能引用先定义的键) -->
+        <Style x:Key="DocTreeItemStyle" TargetType="TreeViewItem">
+            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+        </Style>
+        <!-- 悬停某树项时其「＋」可见 -->
+        <Style x:Key="AddChildBtnStyle" TargetType="Button">
+            <Setter Property="Visibility" Value="Collapsed"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}"/>
+            <Setter Property="Padding" Value="4,0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="ToolTip" Value="新建子文档"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=TreeViewItem}}" Value="True">
+                    <Setter Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -24,7 +51,7 @@
             <Border x:Name="Sidebar" Grid.Column="0"
                     Background="{DynamicResource SolidBackgroundFillColorSecondaryBrush}"
                     BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
-                    BorderThickness="0,0,1,0" CornerRadius="8,0,0,8" Margin="0,0,0,0">
+                    BorderThickness="0,0,1,0" CornerRadius="{DynamicResource SidebarCornerRadius}" Margin="0,0,0,0">
                 <DockPanel>
                     <Button DockPanel.Dock="Top" Content="« 收起" Click="ToggleSidebar_Click"
                             Background="Transparent" BorderThickness="0" Cursor="Hand"
@@ -35,30 +62,48 @@
                             HorizontalAlignment="Stretch"/>
                     <TextBlock DockPanel.Dock="Top" Text="📄 全部文档" FontSize="12" Margin="8,0,0,4"
                                Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
-                    <ListBox x:Name="DocList"
-                             DisplayMemberPath="Title"
-                             Background="Transparent" BorderThickness="0"
-                             SelectionChanged="DocList_SelectionChanged"
-                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
+                    <TreeView x:Name="DocTree"
+                              Background="Transparent" BorderThickness="0"
+                              ItemContainerStyle="{StaticResource DocTreeItemStyle}"
+                              SelectedItemChanged="DocTree_SelectedItemChanged"
+                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <TreeView.Resources>
+                            <!-- 文档树节点:标题(实时跟随首个 # 行) + 悬停显示的「＋」新建子文档按钮 -->
+                            <HierarchicalDataTemplate DataType="{x:Type models:MdTreeNode}" ItemsSource="{Binding Children}">
+                                <DockPanel LastChildFill="True" ToolTip="{Binding Doc.Title}">
+                                    <Button DockPanel.Dock="Right" Content="＋" Click="NewSubDoc_Click" Tag="{Binding Doc}"
+                                            Style="{StaticResource AddChildBtnStyle}"/>
+                                    <TextBlock Text="{Binding Doc.Title}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+                                </DockPanel>
+                            </HierarchicalDataTemplate>
+                        </TreeView.Resources>
+                    </TreeView>
                 </DockPanel>
             </Border>
 
-            <!-- 侧栏:收起态=窄条展开按钮 -->
+            <!-- 侧栏:收起态=窄条(展开 + 新建入口常驻,收起也能一键新建) -->
             <Border x:Name="SidebarRail" Grid.Column="0" Width="0" Visibility="Collapsed"
                     Background="{DynamicResource SolidBackgroundFillColorSecondaryBrush}"
                     BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
-                    BorderThickness="0,0,1,0" CornerRadius="8,0,0,8">
-                <Button Content="»" Click="ToggleSidebar_Click"
-                        Background="Transparent" BorderThickness="0" Cursor="Hand"
-                        VerticalAlignment="Top" Margin="0,8,0,0"
-                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                    BorderThickness="0,0,1,0" CornerRadius="{DynamicResource SidebarCornerRadius}">
+                <StackPanel VerticalAlignment="Top" Margin="0,8,0,0">
+                    <Button Content="»" Click="ToggleSidebar_Click"
+                            Background="Transparent" BorderThickness="0" Cursor="Hand" Padding="4,4"
+                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                            ToolTip="展开文档树"/>
+                    <Button Content="＋" Click="RailNewDoc_Click"
+                            Background="Transparent" BorderThickness="0" Cursor="Hand" Padding="4,4"
+                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                            ToolTip="新建文档"/>
+                </StackPanel>
             </Border>
 
             <Grid Grid.Column="1" Margin="8,0,0,0">
                 <!-- 编辑区卡片:浅色下白底白窗看不出边界,用次级底色+分隔线描边做出明确的内容区卡片 -->
                 <Border Background="{DynamicResource SolidBackgroundFillColorSecondaryBrush}"
                         BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
-                        BorderThickness="1" CornerRadius="8">
+                        BorderThickness="1" CornerRadius="{DynamicResource CardCornerRadius}">
                     <!-- 编辑器从一开始就可见:WebView2 hwnd 必须以真实尺寸创建(Collapsed/Hidden 下 0 尺寸初始化会视口错配);
                          FallbackBox 铺同格被 hwnd 盖住,失败/看门狗时撤 Editor 翻出回退框 -->
                     <wv2:WebView2 x:Name="Editor"/>

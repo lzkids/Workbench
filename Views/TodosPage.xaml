@@ -67,7 +67,7 @@
                                                     </TextBlock.Style>
                                                 </TextBlock>
                                                 <!-- 优先级胶囊:中性底 + 彩字 -->
-                                                <Border CornerRadius="8" Padding="7,1" Margin="8,0,0,0" VerticalAlignment="Center"
+                                                <Border CornerRadius="{DynamicResource CardCornerRadius}" Padding="7,1" Margin="8,0,0,0" VerticalAlignment="Center"
                                                         Background="{DynamicResource ControlFillColorDefaultBrush}"
                                                         BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
                                                         BorderThickness="1">

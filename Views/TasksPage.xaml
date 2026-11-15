@@ -67,7 +67,7 @@
                                                    Click="SubTasksToggle_Click"/>
                                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                             <!-- 状态胶囊:中性底 + 彩色文字,深浅主题通吃 -->
-                                            <Border CornerRadius="10" Padding="9,2"
+                                            <Border CornerRadius="{DynamicResource CardCornerRadius}" Padding="9,2"
                                                     Background="{DynamicResource ControlFillColorDefaultBrush}"
                                                     BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
                                                     BorderThickness="1">
@@ -89,7 +89,7 @@
                                                 </TextBlock>
                                             </Border>
                                             <!-- 标签徽章:Tag 为空时隐藏;颜色随标签语义(Error 红/Warning 黄/Done 绿/紧急 红) -->
-                                            <Border CornerRadius="8" Padding="7,1" Margin="8,0,0,0"
+                                            <Border CornerRadius="{DynamicResource CardCornerRadius}" Padding="7,1" Margin="8,0,0,0"
                                                     VerticalAlignment="Center"
                                                     Background="{Binding Tag, Converter={StaticResource TagBg}}">
                                                 <Border.Style>
@@ -143,7 +143,7 @@
                                                             <StackPanel Orientation="Horizontal">
                                                                 <TextBlock Text="{Binding Title}" FontSize="12.5"
                                                                            Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
-                                                                <Border CornerRadius="7" Padding="5,0" Margin="6,0,0,0"
+                                                                <Border CornerRadius="{DynamicResource SmallCornerRadius}" Padding="5,0" Margin="6,0,0,0"
                                                                         VerticalAlignment="Center"
                                                                         Background="{Binding Tag, Converter={StaticResource TagBg}}">
                                                                     <Border.Style>
